@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Ads Operation Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glow { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+        .scan-line { animation: scan 2s linear infinite; }
+        @keyframes scan { 0% { top: 0%; } 100% { top: 100%; } }
+    </style>
+</head>
+<body class="bg-slate-950 text-white font-mono">
+    <div class="max-w-4xl mx-auto p-10">
+        <div class="border-2 border-blue-500 rounded-lg p-8 relative overflow-hidden bg-slate-900 glow">
+            <div class="absolute inset-0 bg-blue-500/5 scan-line h-1 w-full z-0"></div>
+            
+            <h1 class="text-4xl font-black mb-2 text-blue-400 relative z-10">ADS OPERATION CENTER</h1>
+            <p class="text-blue-200/60 mb-8 relative z-10 font-bold uppercase tracking-widest text-xs">Target: Users containing "ads" | Action: "Ad Today"</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+                <!-- Ayarlar -->
+                <div class="space-y-4">
+                    <div class="bg-black/50 p-4 rounded border border-blue-900">
+                        <label class="text-xs text-blue-400">YOUR PROMO LINK</label>
+                        <input id="my_link" type="text" value="https://t.me/yourchannel" class="w-full bg-transparent border-b border-blue-500 focus:outline-none p-1">
+                    </div>
+                    <div class="bg-black/50 p-4 rounded border border-blue-900">
+                        <label class="text-xs text-blue-400">STORAGE CHANNEL</label>
+                        <input id="storage" type="text" value="@storage_chan" class="w-full bg-transparent border-b border-blue-500 focus:outline-none p-1">
+                    </div>
+                </div>
+
+                <!-- Aksiyon -->
+                <div class="flex flex-col justify-center">
+                    <button onclick="startOperation()" id="opBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-black py-6 rounded shadow-lg shadow-blue-900/50 transition-all active:scale-95">
+                        START "AD TODAY" OPERATION
+                    </button>
+                    <div id="status" class="text-center mt-4 text-sm text-blue-300">System Ready.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canlı Log -->
+        <div class="mt-8 bg-black p-6 rounded border border-gray-800 h-48 overflow-y-auto text-xs" id="logs">
+            [SYSTEM] Waiting for command...
+        </div>
+    </div>
+
+    <script>
+        function addLog(msg) {
+            const logs = document.getElementById('logs');
+            logs.innerHTML += `<div class='mb-1'><span class='text-blue-500'>[${new Date().toLocaleTimeString()}]</span> ${msg}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        async function startOperation() {
+            addLog("Scanning dialogs for 'ads' keywords...");
+            document.getElementById('opBtn').disabled = true;
+            document.getElementById('opBtn').classList.replace('bg-blue-600', 'bg-gray-700');
+            
+            const res = await fetch('/start-ads-now', {method: 'POST'});
+            const data = await res.json();
+            
+            if(data.status === "success") {
+                addLog("OPERATION STARTED: Sending 'Ad Today' to targets.");
+                document.getElementById('status').innerText = "RUNNING...";
+                document.getElementById('status').classList.add('animate-pulse');
+            }
+        }
+    </script>
+</body>
+</html>
