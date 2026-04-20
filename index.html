@@ -2,106 +2,64 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Ads Operation Center</title>
+    <title>S4S Intelligence Panel</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-950 text-white font-mono p-10">
-    <div class="max-w-xl mx-auto space-y-6">
-        
-        <div class="border-2 border-yellow-600 p-6 rounded bg-slate-900 shadow-lg">
-            <h2 class="text-xl font-bold mb-4 text-yellow-500">TELEGRAM GİRİŞ (2FA DESTEKLİ)</h2>
+<body class="bg-slate-950 text-slate-200 p-6 md:p-12 font-mono">
+    <div class="max-w-2xl mx-auto space-y-8">
+        <div class="border-b border-slate-800 pb-4">
+            <h1 class="text-3xl font-black text-blue-500">S4S BOT v3.0</h1>
+            <p class="text-slate-500 text-sm italic">Tracking: vouchs, vouch, ads, dragon, proof</p>
+        </div>
+
+        <div class="bg-slate-900 p-6 rounded-lg border border-slate-800 space-y-6 shadow-2xl">
+            <h2 class="text-xl font-bold text-blue-400">Bot Ayarları</h2>
             
-            <!-- Numara Girişi -->
-            <div id="phoneSection" class="space-y-4">
-                <input id="phone" type="text" placeholder="+905XXXXXXXXX" class="w-full bg-black p-2 border border-yellow-900 text-white">
-                <button onclick="sendCode()" class="w-full bg-yellow-600 p-2 font-bold hover:bg-yellow-700">KOD GÖNDER</button>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs text-slate-500 font-bold uppercase">Reklam Linkin</label>
+                    <input id="my_link" type="text" placeholder="https://t.me/kanalim" class="w-full bg-slate-950 border border-slate-700 p-3 rounded mt-1 focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-500 font-bold uppercase">Kayıt Kanalın</label>
+                    <input id="storage" type="text" placeholder="@kayit_kanali" class="w-full bg-slate-950 border border-slate-700 p-3 rounded mt-1 focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-500 font-bold uppercase">Filtre Kelimeleri (Virgülle ayır)</label>
+                    <input id="keywords" type="text" value="vouchs, vouch, ads, dragon, proof" class="w-full bg-slate-950 border border-slate-700 p-3 rounded mt-1 focus:border-blue-500 outline-none">
+                </div>
+                <button onclick="save()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded transition">AYARLARI UYGULA</button>
             </div>
-
-            <!-- Kod Girişi -->
-            <div id="codeSection" class="hidden mt-4 space-y-4">
-                <input id="code" type="text" placeholder="SMS / Uygulama Kodu" class="w-full bg-black p-2 border border-yellow-900">
-                <button onclick="verifyCode()" class="w-full bg-yellow-500 text-black p-2 font-bold">KODU DOĞRULA</button>
-            </div>
-
-            <!-- 2FA Şifre Girişi (Sadece gerekirse açılır) -->
-            <div id="passwordSection" class="hidden mt-4 space-y-4">
-                <p class="text-red-400 text-sm">İki Adımlı Doğrulama Şifrenizi Girin:</p>
-                <input id="password" type="password" placeholder="2FA Şifreniz" class="w-full bg-black p-2 border border-red-900">
-                <button onclick="verify2FA()" class="w-full bg-red-600 p-2 font-bold">ŞİFREYİ DOĞRULA</button>
-            </div>
-
-            <p id="authStatus" class="mt-4 text-sm text-gray-400"></p>
         </div>
 
-        <div class="border-2 border-blue-500 p-6 rounded bg-slate-900 shadow-lg">
-            <h2 class="text-xl font-bold mb-4 text-blue-400">İŞLEM</h2>
-            <button onclick="startOp()" class="w-full bg-blue-600 p-4 font-black rounded-lg text-lg hover:bg-blue-500 transition-all">
-                SEND "Ads to ads?" TO EVERYONE
+        <div class="bg-slate-900 p-6 rounded-lg border border-slate-800">
+            <h2 class="text-xl font-bold text-yellow-500 mb-4 italic text-center">Operasyon</h2>
+            <button onclick="startOp()" class="w-full border-2 border-yellow-600 p-4 font-black hover:bg-yellow-600 hover:text-black transition uppercase tracking-widest">
+                İsminde kelime geçen herkese mesaj at
             </button>
-            <div id="opStatus" class="mt-4 text-center text-blue-300 font-bold"></div>
+            <p id="status" class="mt-4 text-center text-xs text-slate-500">Bot 7/24 aktif, gelen mesajları ve isimleri tarıyor...</p>
         </div>
-
     </div>
 
     <script>
-        async function sendCode() {
-            const phone = document.getElementById('phone').value;
-            const res = await fetch('/send-code', {
+        async function save() {
+            const data = {
+                my_link: document.getElementById('my_link').value,
+                storage: document.getElementById('storage').value,
+                keywords: document.getElementById('keywords').value
+            };
+            const res = await fetch('/update-settings', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone})
+                body: JSON.stringify(data)
             });
-            const data = await res.json();
-            if(data.status === "success") {
-                document.getElementById('phoneSection').classList.add('hidden');
-                document.getElementById('codeSection').classList.remove('hidden');
-                document.getElementById('authStatus').innerText = "Kod gönderildi.";
-            } else { alert(data.message); }
-        }
-
-        async function verifyCode() {
-            const code = document.getElementById('code').value;
-            const res = await fetch('/verify-login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({code})
-            });
-            const data = await res.json();
-            
-            if(data.status === "success") {
-                loginSuccess();
-            } else if(data.status === "2fa_required") {
-                document.getElementById('codeSection').classList.add('hidden');
-                document.getElementById('passwordSection').classList.remove('hidden');
-                document.getElementById('authStatus').innerText = data.message;
-            } else { alert(data.message); }
-        }
-
-        async function verify2FA() {
-            const password = document.getElementById('password').value;
-            const res = await fetch('/verify-2fa', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({password})
-            });
-            const data = await res.json();
-            if(data.status === "success") {
-                loginSuccess();
-            } else { alert(data.message); }
-        }
-
-        function loginSuccess() {
-            document.getElementById('codeSection').classList.add('hidden');
-            document.getElementById('passwordSection').classList.add('hidden');
-            document.getElementById('authStatus').innerText = "Giriş Başarılı! Operasyonu başlatabilirsiniz.";
-            document.getElementById('authStatus').className = "mt-4 text-sm text-green-400 font-bold";
+            const result = await res.json();
+            alert(result.message);
         }
 
         async function startOp() {
-            document.getElementById('opStatus').innerText = "İşlem başlatıldı, 'ads' içerenler taranıyor...";
-            const res = await fetch('/start-ads-now', {method: 'POST'});
-            const data = await res.json();
-            document.getElementById('opStatus').innerText = data.message;
+            document.getElementById('status').innerText = "Tarama ve toplu mesaj başlatıldı...";
+            await fetch('/start-ads-now', {method: 'POST'});
         }
     </script>
 </body>
