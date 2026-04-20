@@ -12,7 +12,6 @@ app = FastAPI()
 # --- VERDİĞİN BİLGİLER ---
 api_id = 27861882
 api_hash = 'd1c630d699c775e846bf64aadd18aefd'
-# Railway'de dosya kalıcı olsun diye session adını sabitliyoruz
 client = TelegramClient('railway_session', api_id, api_hash)
 
 config = {
@@ -32,7 +31,7 @@ async def index():
     with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
 
-# --- ADIM 1: TELEFON NUMARASI GÖNDER ---
+# ADIM 1: Telefon Numarası Gönder
 @app.post("/send-code")
 async def send_code(data: dict):
     phone = data.get("phone")
@@ -44,19 +43,30 @@ async def send_code(data: dict):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- ADIM 2: GELEN KODU GİR VE GİRİŞ YAP ---
+# ADIM 2: Kodu Doğrula (2FA Hatası Verebilir)
 @app.post("/verify-login")
 async def verify_login(data: dict):
     code = data.get("code")
     try:
         await client.sign_in(config["phone"], code, phone_code_hash=config["phone_code_hash"])
-        return {"status": "success", "message": "Giriş Başarılı! Artık operasyonu başlatabilirsiniz."}
+        return {"status": "success", "message": "Giriş Başarılı!"}
     except SessionPasswordNeededError:
-        return {"status": "error", "message": "İki aşamalı doğrulama (2FA) gerekli. Lütfen kaldırın veya kodu ona göre güncelleyin."}
+        # 2FA (Bulut Şifresi) Gerekli hatası
+        return {"status": "2fa_required", "message": "Hesabınızda 2FA (İki Adımlı Doğrulama) var. Şifrenizi girin."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- ADIM 3: OPERASYONU BAŞLAT ---
+# ADIM 3: 2FA Şifresini Doğrula
+@app.post("/verify-2fa")
+async def verify_2fa(data: dict):
+    password = data.get("password")
+    try:
+        await client.sign_in(password=password)
+        return {"status": "success", "message": "2FA Doğrulandı, Giriş Başarılı!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# ADIM 4: Operasyonu Başlat (Mesaj: Ads to ads?)
 @app.post("/start-ads-now")
 async def start_ads_now(background_tasks: BackgroundTasks):
     if not await client.is_user_authorized():
@@ -64,17 +74,21 @@ async def start_ads_now(background_tasks: BackgroundTasks):
 
     async def run_operation():
         config["is_running"] = True
+        print("Tarama başlıyor...")
         async for dialog in client.iter_dialogs():
-            if "ads" in (dialog.name or "").lower():
+            name = (dialog.name or "").lower()
+            if "ads" in name:
                 try:
-                    await client.send_message(dialog.id, "Ad Today")
-                    await asyncio.sleep(3)
-                except: continue
+                    # İSTEĞİN ÜZERİNE GÜNCELLENEN MESAJ
+                    await client.send_message(dialog.id, "Ads to ads?")
+                    print(f"Mesaj atıldı: {dialog.name}")
+                    await asyncio.sleep(3) # Ban koruması
+                except:
+                    continue
 
     background_tasks.add_task(run_operation)
     return {"status": "success", "message": "Operasyon Başlatıldı!"}
 
 if __name__ == "__main__":
-    # Railway PORT değişkenini kullanır
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
