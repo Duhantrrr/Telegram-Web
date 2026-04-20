@@ -2,83 +2,89 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>S4S AI Dashboard</title>
+    <title>S4S Matrix Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .terminal { background: #050505; height: 250px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; }
-        .log-line { padding: 4px 10px; font-size: 13px; color: #10b981; border-bottom: 1px solid #111; }
+        .terminal { background: #020617; height: 350px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; }
+        .log-entry { padding: 4px 12px; font-size: 13px; border-bottom: 1px solid #0f172a; color: #10b981; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 p-6">
-    <div class="max-w-4xl mx-auto space-y-6">
+<body class="bg-slate-950 text-slate-200 p-4">
+    <div class="max-w-5xl mx-auto space-y-6">
         
-        <!-- ÜST PANEL -->
-        <div class="flex justify-between items-center bg-slate-900 p-4 rounded-xl border border-slate-800">
-            <h1 class="text-2xl font-black text-blue-500">S4S INTELLIGENCE</h1>
-            <div id="authLabel" class="text-xs font-bold px-3 py-1 rounded bg-red-900/30 text-red-500 italic">GİRİŞ GEREKLİ</div>
+        <div class="flex justify-between items-center bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-2xl">
+            <h1 class="text-3xl font-black text-blue-500 tracking-tighter italic">S4S ULTIMATE</h1>
+            <div id="authStatus" class="text-xs font-bold px-4 py-1 rounded-full bg-red-900/20 text-red-500 border border-red-900/50">GİRİŞ GEREKLİ</div>
         </div>
 
-        <!-- GİRİŞ FORMU (Sadece Giriş Yapılmamışsa Görünür) -->
-        <div id="loginBox" class="bg-slate-900 p-6 rounded-xl border-2 border-yellow-600/50 space-y-4">
-            <h2 class="text-yellow-500 font-bold">🔐 Telegram Güvenli Giriş</h2>
-            <div id="step1" class="flex gap-2">
-                <input id="phone" type="text" placeholder="+90..." class="flex-1 bg-slate-950 border border-slate-700 p-2 rounded">
-                <button onclick="sendCode()" class="bg-yellow-600 px-4 rounded font-bold text-black">Kod Gönder</button>
+        <!-- GİRİŞ -->
+        <div id="loginBox" class="bg-slate-900 p-6 rounded-2xl border border-yellow-600/30 space-y-4">
+            <h2 class="text-yellow-500 font-bold">🔐 Giriş Yap</h2>
+            <div id="s1" class="flex gap-2">
+                <input id="phone" type="text" placeholder="+90..." class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
+                <button onclick="sendCode()" class="bg-yellow-600 px-6 rounded-xl font-bold text-black">Kod Gönder</button>
             </div>
-            <div id="step2" class="hidden flex gap-2">
-                <input id="code" type="text" placeholder="Gelen Kod" class="flex-1 bg-slate-950 border border-slate-700 p-2 rounded">
-                <button onclick="verifyCode()" class="bg-yellow-500 px-4 rounded font-bold text-black">Onayla</button>
+            <div id="s2" class="hidden flex gap-2">
+                <input id="code" type="text" placeholder="Gelen Kod" class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
+                <button onclick="verifyCode()" class="bg-yellow-500 px-6 rounded-xl font-bold text-black">Onayla</button>
             </div>
-            <div id="step3" class="hidden flex gap-2">
-                <input id="pass" type="password" placeholder="2FA Şifreniz" class="flex-1 bg-slate-950 border border-slate-700 p-2 rounded">
-                <button onclick="verify2FA()" class="bg-red-600 px-4 rounded font-bold">Şifreyi Doğrula</button>
+            <div id="s3" class="hidden flex gap-2">
+                <input id="pass" type="password" placeholder="2FA Şifresi" class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
+                <button onclick="verify2FA()" class="bg-red-600 px-6 rounded-xl font-bold">Giriş</button>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- AYARLAR -->
-            <div class="bg-slate-900 p-6 rounded-xl border border-slate-800 space-y-4">
-                <h3 class="text-sm font-bold text-slate-500 uppercase">Bot Ayarları</h3>
-                <input id="my_link" type="text" placeholder="Kanal Linkin" class="w-full bg-slate-950 border border-slate-700 p-2 rounded text-sm">
-                <input id="storage" type="text" placeholder="Kayıt Kanalı (@...)" class="w-full bg-slate-950 border border-slate-700 p-2 rounded text-sm">
-                <input id="keywords" type="text" value="vouchs, vouch, ads, dragon, proof" class="w-full bg-slate-950 border border-slate-700 p-2 rounded text-sm">
-                <button onclick="save()" class="w-full bg-blue-600 py-2 rounded font-bold">Kaydet</button>
+            <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-4">
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Kontrol Paneli</h3>
+                <input id="my_link" type="text" placeholder="Senin Kanal Linkin" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm outline-none">
+                <input id="storage" type="text" placeholder="Hedef Kanal (@...)" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm outline-none">
+                <button onclick="save()" class="w-full bg-blue-600 py-3 rounded-xl font-bold">Kaydet</button>
+                <div class="pt-4 border-t border-slate-800">
+                    <button onclick="startScan()" class="w-full bg-amber-600 hover:bg-amber-500 py-4 rounded-xl font-black text-black transition-all">
+                        GEÇMİŞİ TARA & "Ads to ads?" AT
+                    </button>
+                </div>
             </div>
 
-            <!-- TERMİNAL -->
-            <div class="md:col-span-2 space-y-4">
-                <div id="terminal" class="terminal rounded-xl">
-                    <div class="log-line italic text-slate-600">Sistem başlatılıyor...</div>
+            <!-- LOGS -->
+            <div class="lg:col-span-2 space-y-2">
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Canlı İşlem Akışı</h3>
+                <div id="logs" class="terminal rounded-2xl shadow-inner">
+                    <div class="log-entry italic text-slate-600">Sistem hazır...</div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        async function fetchState() {
+        async function refresh() {
             const res = await fetch('/get-logs');
             const data = await res.json();
-            
-            // Log güncelle
-            const term = document.getElementById('terminal');
-            term.innerHTML = data.logs.map(l => `<div class="log-line">${l}</div>`).join('');
-            term.scrollTop = term.scrollHeight;
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML = data.logs.map(l => `<div class="log-entry">${l}</div>`).join('');
+            logsDiv.scrollTop = logsDiv.scrollHeight;
 
-            // Auth durumu
             if(data.is_auth) {
-                document.getElementById('authLabel').innerText = "BAĞLI";
-                document.getElementById('authLabel').className = "text-xs font-bold px-3 py-1 rounded bg-green-900/30 text-green-500 italic";
+                document.getElementById('authStatus').innerText = "BAĞLI";
+                document.getElementById('authStatus').className = "text-xs font-bold px-4 py-1 rounded-full bg-green-900/20 text-green-500 border border-green-900/50";
                 document.getElementById('loginBox').classList.add('hidden');
             }
         }
-        setInterval(fetchState, 2000);
+        setInterval(refresh, 2000);
+
+        async function startScan() {
+            await fetch('/start-scan', {method:'POST'});
+            alert("Geçmiş taraması başlatıldı. Logları izleyin.");
+        }
 
         async function sendCode() {
             const phone = document.getElementById('phone').value;
             const res = await fetch('/send-code', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone})});
             if((await res.json()).status === 'success') {
-                document.getElementById('step1').classList.add('hidden');
-                document.getElementById('step2').classList.remove('hidden');
+                document.getElementById('s1').classList.add('hidden');
+                document.getElementById('s2').classList.remove('hidden');
             }
         }
 
@@ -88,8 +94,8 @@
             const data = await res.json();
             if(data.status === 'success') location.reload();
             if(data.status === '2fa_required') {
-                document.getElementById('step2').classList.add('hidden');
-                document.getElementById('step3').classList.remove('hidden');
+                document.getElementById('s2').classList.add('hidden');
+                document.getElementById('s3').classList.remove('hidden');
             }
         }
 
@@ -100,13 +106,9 @@
         }
 
         async function save() {
-            const data = {
-                my_link: document.getElementById('my_link').value,
-                storage: document.getElementById('storage').value,
-                keywords: document.getElementById('keywords').value
-            };
+            const data = { my_link: document.getElementById('my_link').value, storage: document.getElementById('storage').value };
             await fetch('/update-settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
-            alert("Ayarlar Uygulandı!");
+            alert("Ayarlar güncellendi!");
         }
     </script>
 </body>
