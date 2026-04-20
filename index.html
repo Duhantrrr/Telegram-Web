@@ -8,25 +8,37 @@
 <body class="bg-slate-950 text-white font-mono p-10">
     <div class="max-w-xl mx-auto space-y-6">
         
-        <!-- GİRİŞ BÖLÜMÜ -->
-        <div class="border-2 border-yellow-600 p-6 rounded bg-slate-900">
-            <h2 class="text-xl font-bold mb-4 text-yellow-500">TELEGRAM GİRİŞ</h2>
+        <div class="border-2 border-yellow-600 p-6 rounded bg-slate-900 shadow-lg">
+            <h2 class="text-xl font-bold mb-4 text-yellow-500">TELEGRAM GİRİŞ (2FA DESTEKLİ)</h2>
+            
+            <!-- Numara Girişi -->
             <div id="phoneSection" class="space-y-4">
-                <input id="phone" type="text" placeholder="+905XXXXXXXXX" class="w-full bg-black p-2 border border-yellow-900 focus:outline-none">
-                <button onclick="sendCode()" class="w-full bg-yellow-600 p-2 font-bold">KOD GÖNDER</button>
+                <input id="phone" type="text" placeholder="+905XXXXXXXXX" class="w-full bg-black p-2 border border-yellow-900 text-white">
+                <button onclick="sendCode()" class="w-full bg-yellow-600 p-2 font-bold hover:bg-yellow-700">KOD GÖNDER</button>
             </div>
+
+            <!-- Kod Girişi -->
             <div id="codeSection" class="hidden mt-4 space-y-4">
-                <input id="code" type="text" placeholder="Gelen Kodu Yaz" class="w-full bg-black p-2 border border-yellow-900 focus:outline-none">
-                <button onclick="verifyCode()" class="w-full bg-yellow-500 text-black p-2 font-bold">GİRİŞİ TAMAMLA</button>
+                <input id="code" type="text" placeholder="SMS / Uygulama Kodu" class="w-full bg-black p-2 border border-yellow-900">
+                <button onclick="verifyCode()" class="w-full bg-yellow-500 text-black p-2 font-bold">KODU DOĞRULA</button>
             </div>
-            <p id="authStatus" class="mt-2 text-xs text-gray-400"></p>
+
+            <!-- 2FA Şifre Girişi (Sadece gerekirse açılır) -->
+            <div id="passwordSection" class="hidden mt-4 space-y-4">
+                <p class="text-red-400 text-sm">İki Adımlı Doğrulama Şifrenizi Girin:</p>
+                <input id="password" type="password" placeholder="2FA Şifreniz" class="w-full bg-black p-2 border border-red-900">
+                <button onclick="verify2FA()" class="w-full bg-red-600 p-2 font-bold">ŞİFREYİ DOĞRULA</button>
+            </div>
+
+            <p id="authStatus" class="mt-4 text-sm text-gray-400"></p>
         </div>
 
-        <!-- OPERASYON BÖLÜMÜ -->
-        <div class="border-2 border-blue-500 p-6 rounded bg-slate-900">
-            <h2 class="text-xl font-bold mb-4 text-blue-400">OPERASYON</h2>
-            <button onclick="startOp()" class="w-full bg-blue-600 p-4 font-black rounded italic">START "AD TODAY" OPERATION</button>
-            <div id="opStatus" class="mt-4 text-center text-blue-300"></div>
+        <div class="border-2 border-blue-500 p-6 rounded bg-slate-900 shadow-lg">
+            <h2 class="text-xl font-bold mb-4 text-blue-400">İŞLEM</h2>
+            <button onclick="startOp()" class="w-full bg-blue-600 p-4 font-black rounded-lg text-lg hover:bg-blue-500 transition-all">
+                SEND "Ads to ads?" TO EVERYONE
+            </button>
+            <div id="opStatus" class="mt-4 text-center text-blue-300 font-bold"></div>
         </div>
 
     </div>
@@ -43,10 +55,8 @@
             if(data.status === "success") {
                 document.getElementById('phoneSection').classList.add('hidden');
                 document.getElementById('codeSection').classList.remove('hidden');
-                document.getElementById('authStatus').innerText = "Kod gönderildi, lütfen kutucuğa yazın.";
-            } else {
-                alert(data.message);
-            }
+                document.getElementById('authStatus').innerText = "Kod gönderildi.";
+            } else { alert(data.message); }
         }
 
         async function verifyCode() {
@@ -57,16 +67,38 @@
                 body: JSON.stringify({code})
             });
             const data = await res.json();
+            
             if(data.status === "success") {
+                loginSuccess();
+            } else if(data.status === "2fa_required") {
                 document.getElementById('codeSection').classList.add('hidden');
-                document.getElementById('authStatus').innerText = "Giriş Başarılı! İşlem Yapabilirsiniz.";
-                document.getElementById('authStatus').classList.replace('text-gray-400', 'text-green-400');
-            } else {
-                alert(data.message);
-            }
+                document.getElementById('passwordSection').classList.remove('hidden');
+                document.getElementById('authStatus').innerText = data.message;
+            } else { alert(data.message); }
+        }
+
+        async function verify2FA() {
+            const password = document.getElementById('password').value;
+            const res = await fetch('/verify-2fa', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password})
+            });
+            const data = await res.json();
+            if(data.status === "success") {
+                loginSuccess();
+            } else { alert(data.message); }
+        }
+
+        function loginSuccess() {
+            document.getElementById('codeSection').classList.add('hidden');
+            document.getElementById('passwordSection').classList.add('hidden');
+            document.getElementById('authStatus').innerText = "Giriş Başarılı! Operasyonu başlatabilirsiniz.";
+            document.getElementById('authStatus').className = "mt-4 text-sm text-green-400 font-bold";
         }
 
         async function startOp() {
+            document.getElementById('opStatus').innerText = "İşlem başlatıldı, 'ads' içerenler taranıyor...";
             const res = await fetch('/start-ads-now', {method: 'POST'});
             const data = await res.json();
             document.getElementById('opStatus').innerText = data.message;
