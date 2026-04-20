@@ -1,23 +1,26 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events
+from telethon.errors import SessionPasswordNeededError
 import asyncio
 import re
 import uvicorn
+import os
 
 app = FastAPI()
 
 # --- VERDİĞİN BİLGİLER ---
 api_id = 27861882
 api_hash = 'd1c630d699c775e846bf64aadd18aefd'
-client = TelegramClient('operasyon_oturum', api_id, api_hash)
+# Railway'de dosya kalıcı olsun diye session adını sabitliyoruz
+client = TelegramClient('railway_session', api_id, api_hash)
 
-# Sistem Hafızası
-chat_states = {}
 config = {
     "my_promo_link": "https://t.me/kanalim",
     "storage_channel": "@kayit_kanali",
-    "is_running": False
+    "is_running": False,
+    "phone": None,
+    "phone_code_hash": None
 }
 
 @app.on_event("startup")
@@ -29,52 +32,49 @@ async def index():
     with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
 
-# --- OPERASYON: İsminde 'ads' geçenlere "Ad Today" yaz ---
+# --- ADIM 1: TELEFON NUMARASI GÖNDER ---
+@app.post("/send-code")
+async def send_code(data: dict):
+    phone = data.get("phone")
+    config["phone"] = phone
+    try:
+        result = await client.send_code_request(phone)
+        config["phone_code_hash"] = result.phone_code_hash
+        return {"status": "success", "message": "Kod Telegram'dan gönderildi!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# --- ADIM 2: GELEN KODU GİR VE GİRİŞ YAP ---
+@app.post("/verify-login")
+async def verify_login(data: dict):
+    code = data.get("code")
+    try:
+        await client.sign_in(config["phone"], code, phone_code_hash=config["phone_code_hash"])
+        return {"status": "success", "message": "Giriş Başarılı! Artık operasyonu başlatabilirsiniz."}
+    except SessionPasswordNeededError:
+        return {"status": "error", "message": "İki aşamalı doğrulama (2FA) gerekli. Lütfen kaldırın veya kodu ona göre güncelleyin."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# --- ADIM 3: OPERASYONU BAŞLAT ---
 @app.post("/start-ads-now")
 async def start_ads_now(background_tasks: BackgroundTasks):
     if not await client.is_user_authorized():
-        return {"status": "error", "message": "Giriş yapılmamış!"}
+        return {"status": "error", "message": "Önce giriş yapmalısınız!"}
 
     async def run_operation():
         config["is_running"] = True
-        print("Operasyon başladı: 'ads' içerenler taranıyor...")
-        
         async for dialog in client.iter_dialogs():
-            name = (dialog.name or "").lower()
-            if "ads" in name:
+            if "ads" in (dialog.name or "").lower():
                 try:
-                    # Mesajı gönder
                     await client.send_message(dialog.id, "Ad Today")
-                    # Bu kişiyi takibe al (Cevap gelirse süreç ilerlesin)
-                    chat_states[dialog.id] = "INITIATED"
-                    print(f"Mesaj gönderildi: {dialog.name}")
-                    await asyncio.sleep(3) # Ban yememek için 3 saniye bekle
-                except Exception as e:
-                    print(f"Hata ({dialog.name}): {e}")
+                    await asyncio.sleep(3)
+                except: continue
 
     background_tasks.add_task(run_operation)
     return {"status": "success", "message": "Operasyon Başlatıldı!"}
 
-# --- OTOMATİK CEVAP VE TAKİP MEKANİZMASI ---
-@client.on(events.NewMessage(incoming=True))
-async def handler(event):
-    if not config["is_running"]: return
-    
-    sid = event.chat_id
-    msg = event.raw_text.lower()
-
-    # EĞER karşı taraf "add to" yazarsa (Süreç başlasın)
-    if "add to" in msg:
-        chat_states[sid] = "WAITING_LINK"
-        await event.reply(f"Sure! Add mine first: {config['my_promo_link']} \nSend your link when done!")
-
-    # EĞER karşı taraf link gönderirse (Yakalayıp kanala at)
-    elif sid in chat_states and chat_states[sid] == "WAITING_LINK":
-        link_match = re.search(r'(t\.me/[\w/]+|https?://t\.me/[\w/]+)', msg)
-        if link_match:
-            await client.forward_messages(config["storage_channel"], event.message)
-            chat_states[sid] = "DONE"
-            await event.reply("Done! I added yours too. Any more channels?")
-
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Railway PORT değişkenini kullanır
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
