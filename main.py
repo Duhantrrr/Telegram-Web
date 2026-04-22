@@ -1,7 +1,6 @@
-from fastapi import FastAPI, BackgroundTasks, Request
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events, errors
-from telethon.errors import SessionPasswordNeededError
 import asyncio
 import os
 import uvicorn
@@ -13,14 +12,12 @@ app = FastAPI()
 # --- AYARLAR ---
 api_id = 27861882
 api_hash = 'd1c630d699c775e846bf64aadd18aefd'
+# Railway'de taze giriş yaptıysan bu oturum ismini kullanır
 client = TelegramClient('railway_session', api_id, api_hash)
 
-# Geçici hafıza (Giriş süreci için)
-auth_state = {"phone": None, "hash": None}
-
 config = {
-    "my_promo_link": "https://t.me/senin_kanalin",
-    "storage_channel": "@cloudads1", 
+    "my_promo_link": "https://t.me/kanaliniz", # Panelden kaydedilecek
+    "storage_channel": "@cloudads1",
     "is_auto_pilot_on": False,
     "logs": []
 }
@@ -33,86 +30,77 @@ def add_log(msg):
     print(entry)
 
 def get_ids():
-    ids = []
-    try:
-        if os.path.exists("ids.txt"):
-            with open("ids.txt", "r") as f:
-                ids = [int(line.strip()) for line in f if line.strip().isdigit()]
-    except: pass
-    return ids
+    if os.path.exists("ids.txt"):
+        with open("ids.txt", "r") as f:
+            return [int(l.strip()) for l in f if l.strip().isdigit()]
+    return []
 
 @app.on_event("startup")
 async def startup():
     await client.connect()
-    add_log("🚀 Sistem Başlatıldı.")
+    add_log("🚀 Sistem Başlatıldı. Link pususu aktif!")
 
-# --- GİRİŞ API'LERİ (WEB PANEL İÇİN) ---
+# --- ANA TETİKLEYİCİ: ANİDEN GELEN LİNK VE SIRALI CEVAP ---
+@client.on(events.NewMessage(incoming=True))
+async def handle_sudden_link(event):
+    if not event.is_private: return # Sadece DM
+    
+    text = event.raw_text.lower()
+    # Mesajda Telegram linki yakalanırsa:
+    if "t.me/" in text or "telegram.me/" in text:
+        sender = await event.get_sender()
+        name = sender.first_name or "Biri"
+        add_log(f"🔥 Link Yakalandı: {name} (@{sender.username})")
+        
+        try:
+            # 1. Kendi linkini at
+            await event.reply(config["my_promo_link"])
+            add_log(f"📤 Kendi linkim gönderildi -> {name}")
+            await asyncio.sleep(1)
 
-@app.post("/login/send-code")
-async def send_code(data: dict):
-    phone = data.get("phone")
-    auth_state["phone"] = phone
-    try:
-        res = await client.send_code_request(phone)
-        auth_state["hash"] = res.phone_code_hash
-        return {"status": "success", "message": "Kod gönderildi!"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+            # 2. "Go?" yaz
+            await event.respond("Go?")
+            add_log(f"💬 'Go?' soruldu -> {name}")
+            await asyncio.sleep(1)
 
-@app.post("/login/verify-code")
-async def verify_code(data: dict):
-    code = data.get("code")
-    try:
-        await client.sign_in(auth_state["phone"], code, phone_code_hash=auth_state["hash"])
-        return {"status": "success", "message": "Giriş başarılı!"}
-    except SessionPasswordNeededError:
-        return {"status": "2fa_required", "message": "2FA Şifresi gerekli."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+            # 3. Gelen linki kanala ilet (Forward)
+            fwd = await client.forward_messages(config["storage_channel"], event.message)
+            
+            # 4. Kanıt linkini al ve "Done" mesajını at
+            chan_name = config["storage_channel"].replace("@", "")
+            proof_link = f"https://t.me/{chan_name}/{fwd.id}"
+            await event.respond(f"Done {proof_link}")
+            add_log(f"🎯 Yanlama yapıldı, kanıt atıldı: {proof_link}")
+            await asyncio.sleep(1)
 
-@app.post("/login/verify-2fa")
-async def verify_2fa(data: dict):
-    password = data.get("password")
-    try:
-        await client.sign_in(password=password)
-        return {"status": "success", "message": "2FA ile giriş başarılı!"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+            # 5. En son "You?" yaz
+            await event.respond("You?")
+            add_log(f"❓ 'You?' soruldu -> {name}")
 
-# --- DİĞER FONKSİYONLAR ---
+        except Exception as e:
+            add_log(f"❌ İşlem sırasında hata: {str(e)[:50]}")
 
-async def hourly_broadcast_task():
+# --- SAATLİK BROADCAST (ARKA PLAN GÖREVİ) ---
+async def hourly_broadcast():
     while config["is_auto_pilot_on"]:
         targets = get_ids()
-        if not targets:
-            await asyncio.sleep(600)
-            continue
-        add_log(f"📢 Operasyon: {len(targets)} kişi.")
+        add_log(f"📢 Saatlik operasyon başladı: {len(targets)} kişi.")
+        sent = 0
         for uid in targets:
             if not config["is_auto_pilot_on"]: break
             try:
                 await client.send_message(uid, "Ads to ads?")
-                await asyncio.sleep(2.5)
+                sent += 1
+                add_log(f"✉️ {uid} mesaj atıldı.")
+                await asyncio.sleep(3) # Güvenli hız
             except errors.FloodWaitError as e:
+                add_log(f"🕒 Spam! {e.seconds} sn bekleme...")
                 await asyncio.sleep(e.seconds)
             except: continue
+        add_log(f"🏁 Tur bitti. Başarılı: {sent}")
         await asyncio.sleep(3600)
 
-@client.on(events.NewMessage(incoming=True))
-async def handle_response(event):
-    if not event.is_private: return
-    text = event.raw_text.lower()
-    if "t.me/" in text or "telegram.me/" in text:
-        try:
-            fwd = await client.forward_messages(config["storage_channel"], event.message)
-            chan_name = config["storage_channel"].replace("@", "")
-            done_link = f"https://t.me/{chan_name}/{fwd.id}"
-            await event.reply(config["my_promo_link"])
-            await event.respond("Go")
-            await event.respond(f"Done {done_link}")
-            add_log(f"✅ Link kapıldı: {event.chat_id}")
-        except: pass
-
+# --- API VE WEB PANEL ---
 @app.get("/")
 async def index():
     with open("index.html", "r", encoding="utf-8") as f:
@@ -120,19 +108,25 @@ async def index():
 
 @app.get("/get-data")
 async def get_data():
-    return {"logs": config["logs"], "is_auto": config["is_auto_pilot_on"], "is_auth": await client.is_user_authorized()}
+    return {
+        "logs": config["logs"],
+        "is_auto": config["is_auto_pilot_on"],
+        "is_auth": await client.is_user_authorized()
+    }
 
 @app.post("/toggle")
 async def toggle(background_tasks: BackgroundTasks):
     config["is_auto_pilot_on"] = not config["is_auto_pilot_on"]
     if config["is_auto_pilot_on"]:
-        background_tasks.add_task(hourly_broadcast_task)
+        background_tasks.add_task(hourly_broadcast)
     return {"status": "ok"}
 
 @app.post("/update")
 async def update(data: dict):
     config["my_promo_link"] = data.get("link")
+    add_log("⚙️ Linkin başarıyla kaydedildi.")
     return {"status": "ok"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
