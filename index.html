@@ -5,34 +5,47 @@
     <title>S4S Autonomous Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .terminal { background: #020617; height: 350px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; color: #10b981; }
-        .log-line { padding: 4px 12px; border-bottom: 1px solid #0f172a; font-size: 12px; }
+        .terminal { background: #020617; height: 300px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; color: #10b981; }
+        .log-line { padding: 4px 12px; border-bottom: 1px solid #0f172a; font-size: 11px; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 p-6">
+<body class="bg-slate-950 text-slate-200 p-4">
     <div class="max-w-4xl mx-auto space-y-6">
         
+        <!-- GİRİŞ PANELİ (SADECE GİRİŞ GEREKLİYSE GÖRÜNÜR) -->
+        <div id="login-section" class="hidden bg-slate-900 p-6 rounded-2xl border-2 border-yellow-600/50 space-y-4">
+            <h2 class="text-yellow-500 font-bold italic">🔐 Telegram Girişi Gerekli</h2>
+            <div id="step-phone" class="flex gap-2">
+                <input id="phone" type="text" placeholder="+905XXXXXXXXX" class="flex-1 bg-slate-950 border border-slate-700 p-2 rounded-xl text-sm">
+                <button onclick="sendCode()" class="bg-yellow-600 px-4 py-2 rounded-xl text-black font-bold">Kod Gönder</button>
+            </div>
+            <div id="step-code" class="hidden flex gap-2">
+                <input id="code" type="text" placeholder="SMS Kodu" class="flex-1 bg-slate-950 border border-slate-700 p-2 rounded-xl text-sm">
+                <button onclick="verifyCode()" class="bg-yellow-500 px-4 py-2 rounded-xl text-black font-bold">Doğrula</button>
+            </div>
+            <div id="step-2fa" class="hidden flex gap-2">
+                <input id="password" type="password" placeholder="2FA Şifreniz" class="flex-1 bg-slate-950 border border-slate-700 p-2 rounded-xl text-sm">
+                <button onclick="verify2fa()" class="bg-red-600 px-4 py-2 rounded-xl text-white font-bold">Giriş Yap</button>
+            </div>
+        </div>
+
         <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 flex justify-between items-center shadow-2xl">
             <div>
-                <h1 class="text-3xl font-black text-blue-500 italic uppercase">CloudAds AI</h1>
-                <p id="auth" class="text-xs font-bold text-red-500 italic">DURUM: KONTROL EDİLİYOR</p>
+                <h1 class="text-3xl font-black text-blue-500 tracking-tighter">CloudAds AI</h1>
+                <p id="status-text" class="text-xs font-bold text-gray-500">DURUM: KONTROL EDİLİYOR...</p>
             </div>
-            <button onclick="toggle()" id="btn" class="bg-blue-600 px-8 py-3 rounded-xl font-bold hover:bg-blue-500 transition-all">SİSTEMİ BAŞLAT</button>
+            <button onclick="toggle()" id="btn" class="bg-blue-600 px-8 py-3 rounded-xl font-bold">YÜKLENİYOR</button>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-4">
-                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Kanal Ayarın</h2>
-                <input id="l" type="text" placeholder="Reklam Linkin" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm outline-none">
+                <h2 class="text-xs text-slate-500 font-bold uppercase">Reklam Linkin</h2>
+                <input id="l" type="text" placeholder="Kanal Linkin" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm outline-none">
                 <button onclick="save()" class="w-full bg-blue-600 py-3 rounded-xl font-bold">KAYDET</button>
-                <div class="text-[10px] text-slate-500 mt-2">
-                    *Linkler otomatik olarak @cloudads1 kanalına gider.
-                </div>
             </div>
-
             <div class="md:col-span-2 space-y-2">
-                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Canlı İşlem Akışı</h2>
-                <div id="logs" class="terminal rounded-2xl"></div>
+                <h2 class="text-xs text-slate-500 font-bold uppercase">Canlı Terminal</h2>
+                <div id="logs" class="terminal rounded-2xl shadow-2xl"></div>
             </div>
         </div>
     </div>
@@ -46,36 +59,60 @@
                 document.getElementById('logs').innerHTML = data.logs.map(l => `<div class="log-line">${l}</div>`).join('');
                 document.getElementById('logs').scrollTop = document.getElementById('logs').scrollHeight;
 
-                const auth = document.getElementById('auth');
+                const statusText = document.getElementById('status-text');
+                const loginSection = document.getElementById('login-section');
+
                 if(data.is_auth) {
-                    auth.innerText = "SİSTEM BAĞLI (OTURUM OK)";
-                    auth.className = "text-xs font-bold text-green-500 italic";
+                    statusText.innerText = "SİSTEM BAĞLI (OTURUM AKTİF)";
+                    statusText.className = "text-xs font-bold text-green-500";
+                    loginSection.classList.add('hidden');
                 } else {
-                    auth.innerText = "OTURUM YOK! GİRİŞ GEREKLİ";
-                    auth.className = "text-xs font-bold text-red-500 italic";
+                    statusText.innerText = "GİRİŞ GEREKLİ!";
+                    statusText.className = "text-xs font-bold text-red-500";
+                    loginSection.classList.remove('hidden');
                 }
 
                 const btn = document.getElementById('btn');
-                if(data.is_auto) {
-                    btn.innerText = "OTOMATİK PİLOTU DURDUR";
-                    btn.className = "bg-green-600 px-8 py-3 rounded-xl font-bold animate-pulse";
-                } else {
-                    btn.innerText = "OTOMATİK PİLOTU BAŞLAT";
-                    btn.className = "bg-blue-600 px-8 py-3 rounded-xl font-bold hover:bg-blue-500";
-                }
+                btn.innerText = data.is_auto ? "OTOMATİK PİLOTU DURDUR" : "OTOMATİK PİLOTU BAŞLAT";
+                btn.className = data.is_auto ? "bg-green-600 px-8 py-3 rounded-xl font-bold animate-pulse" : "bg-blue-600 px-8 py-3 rounded-xl font-bold";
             } catch (e) {}
         }
         setInterval(refresh, 2000);
 
+        async function sendCode() {
+            const phone = document.getElementById('phone').value;
+            const res = await fetch('/login/send-code', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone})});
+            const data = await res.json();
+            if(data.status === 'success') {
+                document.getElementById('step-phone').classList.add('hidden');
+                document.getElementById('step-code').classList.remove('hidden');
+            } else { alert(data.message); }
+        }
+
+        async function verifyCode() {
+            const code = document.getElementById('code').value;
+            const res = await fetch('/login/verify-code', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code})});
+            const data = await res.json();
+            if(data.status === 'success') {
+                location.reload();
+            } else if (data.status === '2fa_required') {
+                document.getElementById('step-code').classList.add('hidden');
+                document.getElementById('step-2fa').classList.remove('hidden');
+            } else { alert(data.message); }
+        }
+
+        async function verify2fa() {
+            const password = document.getElementById('password').value;
+            const res = await fetch('/login/verify-2fa', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password})});
+            const data = await res.json();
+            if(data.status === 'success') location.reload(); else alert(data.message);
+        }
+
         async function toggle() { await fetch('/toggle', {method: 'POST'}); }
         async function save() {
             const link = document.getElementById('l').value;
-            await fetch('/update', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({link})
-            });
-            alert("Reklam linkin kaydedildi.");
+            await fetch('/update', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({link})});
+            alert("Kaydedildi.");
         }
     </script>
 </body>
