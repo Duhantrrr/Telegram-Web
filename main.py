@@ -1,142 +1,126 @@
-from fastapi import FastAPI, BackgroundTasks, Request
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import HTMLResponse
-from telethon import TelegramClient, events
-from telethon.errors import SessionPasswordNeededError
-from telethon.tl.types import PeerChannel
+from telethon import TelegramClient, events, errors
 import asyncio
-import re
-import uvicorn
 import os
+import uvicorn
+import re
 from datetime import datetime
 
 app = FastAPI()
 
-# --- API BİLGİLERİN ---
+# --- AYARLAR ---
+# Oturum ismini bozma (Daha önce giriş yaptığın isim)
 api_id = 27861882
 api_hash = 'd1c630d699c775e846bf64aadd18aefd'
 client = TelegramClient('railway_session', api_id, api_hash)
 
-# Sistem Belleği
-logs = []
-waiting_list = {} 
-auth_data = {"phone": None, "phone_code_hash": None}
-
 config = {
     "my_promo_link": "https://t.me/senin_kanalin",
-    "storage_channel": "@kayit_kanali", # Linklerin iletileceği kanal
-    "keywords": ["vouchs", "vouch", "ads", "dragon", "proof", "prof"]
+    "storage_channel": "@cloudads1", 
+    "is_auto_pilot_on": False,
+    "logs": []
 }
 
 def add_log(msg):
     time_str = datetime.now().strftime("%H:%M:%S")
-    logs.append(f"[{time_str}] {msg}")
-    if len(logs) > 40: logs.pop(0)
+    entry = f"[{time_str}] {msg}"
+    config["logs"].append(entry)
+    if len(config["logs"]) > 50: config["logs"].pop(0)
+    print(entry)
+
+# ids.txt dosyasından ID'leri oku
+def get_ids():
+    ids = []
+    try:
+        if os.path.exists("ids.txt"):
+            with open("ids.txt", "r") as f:
+                ids = [int(line.strip()) for line in f if line.strip().isdigit()]
+        else:
+            add_log("⚠️ ids.txt bulunamadı!")
+    except Exception as e:
+        add_log(f"❌ Liste okuma hatası: {e}")
+    return ids
 
 @app.on_event("startup")
 async def startup():
     await client.connect()
-    add_log("🚀 Sistem Aktif. Operasyon ve Dinleme Hazır.")
+    add_log("🚀 Sistem Başlatıldı. Oturum korundu.")
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+# --- OTOMATİK PİLOT: 1 SAATTE BİR BROADCAST ---
+async def hourly_broadcast_task():
+    while config["is_auto_pilot_on"]:
+        targets = get_ids()
+        if not targets:
+            add_log("⚠️ Liste boş, 15 dk sonra tekrar denenecek.")
+            await asyncio.sleep(900)
+            continue
 
-@app.get("/get-logs")
-async def get_logs():
-    return {"logs": logs, "is_auth": await client.is_user_authorized()}
+        add_log(f"📢 Operasyon başladı: {len(targets)} kişi hedefleniyor.")
+        for uid in targets:
+            if not config["is_auto_pilot_on"]: break
+            try:
+                await client.send_message(uid, "Ads to ads?")
+                await asyncio.sleep(2) # 2 saniye bekleme
+            except errors.FloodWaitError as e:
+                add_log(f"🕒 Spam engeli: {e.seconds} saniye bekleniyor...")
+                await asyncio.sleep(e.seconds)
+            except:
+                continue
 
-# --- GİRİŞ VE AYARLAR ---
-@app.post("/send-code")
-async def send_code(data: dict):
-    phone = data.get("phone")
-    auth_data["phone"] = phone
-    try:
-        res = await client.send_code_request(phone)
-        auth_data["phone_code_hash"] = res.phone_code_hash
-        add_log(f"📲 Kod istendi: {phone}")
-        return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+        add_log("💤 Tur bitti. 1 saat uyku modu.")
+        await asyncio.sleep(3600)
 
-@app.post("/verify-login")
-async def verify_login(data: dict):
-    try:
-        await client.sign_in(auth_data["phone"], data.get("code"), phone_code_hash=auth_data["phone_code_hash"])
-        add_log("✅ Giriş başarılı!")
-        return {"status": "success"}
-    except SessionPasswordNeededError: return {"status": "2fa_required"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/verify-2fa")
-async def verify_2fa(data: dict):
-    try:
-        await client.sign_in(password=data.get("password"))
-        add_log("✅ 2FA Girişi başarılı!")
-        return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/update-settings")
-async def update_settings(data: dict):
-    config["my_promo_link"] = data.get("my_link", config["my_promo_link"])
-    config["storage_channel"] = data.get("storage", config["storage_channel"])
-    add_log("⚙️ Ayarlar güncellendi.")
-    return {"status": "success"}
-
-# --- OPERASYON: GEÇMİŞİ TARA VE "Ads to ads?" YAZ ---
-@app.post("/start-scan")
-async def start_scan(background_tasks: BackgroundTasks):
-    async def run_scan():
-        add_log("🔍 Geçmiş DM'ler taranıyor...")
-        count = 0
-        async for dialog in client.iter_dialogs():
-            if dialog.is_user:
-                name = f"{dialog.name} {getattr(dialog.entity, 'username', '') or ''}".lower()
-                if any(kw in name for kw in config["keywords"]):
-                    try:
-                        await client.send_message(dialog.id, "Ads to ads?")
-                        waiting_list[dialog.id] = True
-                        count += 1
-                        add_log(f"✉️ Mesaj atıldı: {dialog.name}")
-                        await asyncio.sleep(2.5) # Ban koruması
-                    except: continue
-        add_log(f"✅ Tarama bitti. {count} kişiye yazıldı.")
-    background_tasks.add_task(run_scan)
-    return {"status": "success"}
-
-# --- ANA DİNLEME VE LİNK İLETME ---
+# --- OTOMATİK CEVAP: LİNK -> LİNK + GO + DONE ---
 @client.on(events.NewMessage(incoming=True))
-async def handler(event):
+async def handle_response(event):
     if not event.is_private: return
-    sender = await event.get_sender()
-    sid = event.chat_id
-    msg_text = event.raw_text.lower()
     
-    # 1. TETİKLEYİCİ: İsminde keyword olan biri mesaj atarsa VEYA mesajda "ads" geçerse
-    name_info = f"{sender.first_name or ''} {sender.last_name or ''} {sender.username or ''}".lower()
-    is_target = any(kw in name_info for kw in config["keywords"]) or "ads" in msg_text
-
-    if is_target and sid not in waiting_list:
-        add_log(f"🔍 Yeni hedef: {sender.first_name}")
-        await event.reply(f"Ads to ads? Okay, add mine first:\n{config['my_promo_link']}\n\nSend your link when done!")
-        waiting_list[sid] = True
-
-    # 2. LİNK YAKALAMA VE "DONE (LINK)" GÖNDERME
-    elif sid in waiting_list and ("t.me/" in msg_text or "telegram.me/" in msg_text):
+    text = event.raw_text.lower()
+    if "t.me/" in text or "telegram.me/" in text:
         try:
-            # Mesajı kanala ilet
+            # 1. Linki @cloudads1 kanalına ilet
             fwd = await client.forward_messages(config["storage_channel"], event.message)
             
-            # Mesajın iletildiği kanaldaki linkini oluştur
-            chan = config['storage_channel'].replace("@", "")
-            msg_link = f"https://t.me/{chan}/{fwd.id}"
+            # 2. Mesajın kanaldaki linkini oluştur
+            chan_name = config["storage_channel"].replace("@", "")
+            done_link = f"https://t.me/{chan_name}/{fwd.id}"
             
-            # Kullanıcıya "Done (link)" mesajı at
-            await event.reply(f"Done {msg_link}")
+            # 3. Yanıtları fırlat
+            await event.reply(config["my_promo_link"])
+            await event.respond("Go")
+            await event.respond(f"Done {done_link}")
             
-            add_log(f"🎯 Yanlama iletildi: {sender.first_name} -> {msg_link}")
-            del waiting_list[sid]
+            add_log(f"✅ Link kapıldı: {event.chat_id} -> Done linki gönderildi.")
         except Exception as e:
-            add_log(f"❌ İletme hatası: {e}")
+            add_log(f"❌ Yanıt hatası: {e}")
+
+# --- WEB PANEL YOLLARI ---
+@app.get("/")
+async def index():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+@app.get("/get-data")
+async def get_data():
+    return {
+        "logs": config["logs"],
+        "is_auto": config["is_auto_pilot_on"],
+        "is_auth": await client.is_user_authorized()
+    }
+
+@app.post("/toggle")
+async def toggle(background_tasks: BackgroundTasks):
+    config["is_auto_pilot_on"] = not config["is_auto_pilot_on"]
+    if config["is_auto_pilot_on"]:
+        background_tasks.add_task(hourly_broadcast_task)
+    return {"status": "ok"}
+
+@app.post("/update")
+async def update(data: dict):
+    config["my_promo_link"] = data.get("link")
+    return {"status": "ok"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
