@@ -18,7 +18,7 @@ client = TelegramClient('railway_session', api_id, api_hash)
 auth_state = {"phone": None, "hash": None}
 config = {
     "my_promo_link": "https://t.me/kanalim",
-    "storage_channel": "@cloudads1", 
+    "storage_channel": "@adscloud1", 
     "is_auto_pilot_on": False,
     "logs": []
 }
