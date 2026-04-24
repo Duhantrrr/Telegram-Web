@@ -70,78 +70,28 @@ async def handle_incoming(event):
         except: pass
 
 # --- SAATLİK OPERASYON (USERNAME ÜZERİNDEN) ---
+# ... (Üst kısımlar aynı) ...
+
 async def hourly_broadcast():
     while config["is_auto_pilot_on"]:
         targets = get_usernames()
-        add_log(f"📢 Operasyon: {len(targets)} kullanıcı hedefleniyor.")
+        add_log(f"📢 Operasyon: {len(targets)} kişi (2 saatte bir döngüsü)")
         sent = 0
-        fail = 0
         
         for username in targets:
             if not config["is_auto_pilot_on"]: break
             try:
-                # Username üzerinden mesaj gönder
                 await client.send_message(username, "Ads to ads?")
                 sent += 1
-                add_log(f"✅ Gitti: @{username} ({sent}/{len(targets)})")
-                await asyncio.sleep(7) # Spam yememek için süreyi artırdık
+                add_log(f"✅ İletildi: @{username}")
+                await asyncio.sleep(6) # 6 saniye bekleme (Güvenli)
             except errors.FloodWaitError as e:
-                add_log(f"🕒 Telegram engeli: {e.seconds} sn bekleme...")
+                add_log(f"🕒 Spam! {e.seconds} sn bekleniyor...")
                 await asyncio.sleep(e.seconds)
-            except Exception as e:
-                fail += 1
-                continue
+            except: continue
         
-        add_log(f"🏁 Tur bitti. Başarılı: {sent} | Başarısız: {fail}")
-        await asyncio.sleep(3600)
+        add_log(f"🏁 Tur bitti. Başarılı: {sent}. 2 SAAT UYKU MODU.")
+        # 2 Saat Bekleme (7200 saniye)
+        await asyncio.sleep(7200)
 
-# --- WEB PANEL API (Arayüz aynı kalabilir) ---
-@app.get("/")
-async def index():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
-
-@app.get("/get-data")
-async def get_data():
-    return {"logs": config["logs"], "is_auto": config["is_auto_pilot_on"], "is_auth": await client.is_user_authorized()}
-
-@app.post("/login/send-code")
-async def send_code(data: dict):
-    phone = data.get("phone")
-    auth_state["phone"] = phone
-    try:
-        res = await client.send_code_request(phone)
-        auth_state["hash"] = res.phone_code_hash
-        return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/login/verify-code")
-async def verify_code(data: dict):
-    try:
-        await client.sign_in(auth_state["phone"], data.get("code"), phone_code_hash=auth_state["hash"])
-        return {"status": "success"}
-    except SessionPasswordNeededError: return {"status": "2fa_required"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/login/verify-2fa")
-async def verify_2fa(data: dict):
-    try:
-        await client.sign_in(password=data.get("password"))
-        return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/toggle")
-async def toggle(background_tasks: BackgroundTasks):
-    config["is_auto_pilot_on"] = not config["is_auto_pilot_on"]
-    if config["is_auto_pilot_on"]:
-        background_tasks.add_task(hourly_broadcast)
-    return {"status": "ok"}
-
-@app.post("/update")
-async def update(data: dict):
-    config["my_promo_link"] = data.get("link")
-    return {"status": "ok"}
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+# ... (Alt kısımlar aynı) ...
