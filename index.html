@@ -2,50 +2,47 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>S4S Matrix Dashboard</title>
+    <title>S4S Matrix Hybrid</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .terminal { background: #020617; height: 350px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; }
-        .log-entry { padding: 4px 12px; font-size: 11px; border-bottom: 1px solid #0f172a; color: #10b981; }
+        .terminal { background: #020617; height: 350px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; color: #10b981; }
+        .log-line { padding: 4px 12px; border-bottom: 1px solid #0f172a; font-size: 11px; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 p-4">
+<body class="bg-slate-950 text-slate-200 p-4 font-sans">
     <div class="max-w-4xl mx-auto space-y-6">
         
+        <!-- Üst Bar -->
         <div class="flex justify-between items-center bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-2xl">
-            <h1 class="text-2xl font-black text-blue-500 italic">S4S ULTIMATE</h1>
-            <div id="authStatus" class="text-xs font-bold px-4 py-1 rounded-full bg-red-900/20 text-red-500 border border-red-900/50">GİRİŞ GEREKLİ</div>
-        </div>
-
-        <!-- GİRİŞ PANELİ -->
-        <div id="loginBox" class="bg-slate-900 p-6 rounded-2xl border-2 border-yellow-600/30 space-y-4">
-            <h2 class="text-yellow-500 font-bold">🔐 Telegram Girişi</h2>
-            <div id="s1" class="flex gap-2">
-                <input id="phone" type="text" placeholder="+905..." class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
-                <button onclick="sendCode()" class="bg-yellow-600 px-6 rounded-xl font-bold text-black hover:bg-yellow-500">Kod Gönder</button>
+            <div>
+                <h1 class="text-2xl font-black text-blue-500 italic tracking-tighter">S4S HYBRID SYSTEM</h1>
+                <p id="auth" class="text-[10px] font-bold text-red-500">KONTROL EDİLİYOR...</p>
             </div>
-            <div id="s2" class="hidden flex gap-2">
-                <input id="code" type="text" placeholder="SMS Kodu" class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
-                <button onclick="verifyCode()" class="bg-yellow-500 px-6 rounded-xl font-bold text-black">Onayla</button>
-            </div>
-            <div id="s3" class="hidden flex gap-2">
-                <input id="pass" type="password" placeholder="2FA Şifresi" class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
-                <button onclick="verify2FA()" class="bg-red-600 px-6 rounded-xl font-bold">Giriş</button>
+            <div class="text-right">
+                <p id="userCount" class="text-xs text-slate-500 font-bold">0 KİŞİ KAYITLI</p>
             </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Sol: Kontrol -->
             <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-4">
-                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest text-center">Ayarlar</h3>
-                <input id="l" type="text" placeholder="Reklam Linkin" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm">
-                <button onclick="save()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold">LİNKİ KAYDET</button>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-500 uppercase">Reklam Linkin</label>
+                    <input id="linkInput" type="text" class="w-full bg-black border border-slate-700 p-2 mt-1 rounded-lg text-sm outline-none">
+                </div>
+                <button onclick="saveLink()" class="w-full bg-blue-600 py-2 rounded-xl font-bold hover:bg-blue-500 transition-all">LİNKİ GÜNCELLE</button>
+                
                 <div class="pt-4 border-t border-slate-800">
-                    <button onclick="toggle()" id="btn" class="w-full bg-emerald-600 py-4 rounded-xl font-black text-white">YÜKLENİYOR...</button>
+                    <button onclick="startManualAds()" class="w-full bg-emerald-600 py-4 rounded-xl font-black text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/20">
+                        LİSTEYE TOPLU MESAJ AT
+                    </button>
+                    <p class="text-[9px] text-center text-slate-600 mt-2 italic">Not: 6 saniye arayla gönderir.</p>
                 </div>
             </div>
 
+            <!-- Sağ: Terminal -->
             <div class="md:col-span-2 space-y-2">
-                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Canlı Terminal</h3>
+                <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Canlı İşlem Terminali</h2>
                 <div id="logs" class="terminal rounded-2xl shadow-inner"></div>
             </div>
         </div>
@@ -54,62 +51,31 @@
     <script>
         async function refresh() {
             try {
-                const res = await fetch('/get-data');
+                const res = await fetch('/status');
                 const data = await res.json();
                 
-                document.getElementById('logs').innerHTML = data.logs.map(l => `<div class="log-entry">${l}</div>`).join('');
+                document.getElementById('logs').innerHTML = data.logs.map(l => `<div class="log-line">${l}</div>`).join('');
                 document.getElementById('logs').scrollTop = document.getElementById('logs').scrollHeight;
-
-                const auth = document.getElementById('authStatus');
-                const loginBox = document.getElementById('loginBox');
-                if(data.is_auth) {
-                    auth.innerText = "SİSTEM BAĞLI";
-                    auth.className = "text-xs font-bold px-4 py-1 rounded-full bg-green-900/20 text-green-500 border border-green-900/50";
-                    loginBox.classList.add('hidden');
-                } else {
-                    auth.innerText = "GİRİŞ GEREKLİ!";
-                    auth.className = "text-xs font-bold px-4 py-1 rounded-full bg-red-900/20 text-red-500 border border-red-900/50";
-                    loginBox.classList.remove('hidden');
-                }
-
-                const btn = document.getElementById('btn');
-                btn.innerText = data.is_auto ? "OTOMATİK PİLOTU DURDUR" : "OTOMATİK PİLOTU BAŞLAT";
-                btn.className = data.is_auto ? "w-full bg-red-600 py-4 rounded-xl font-black text-white animate-pulse" : "w-full bg-emerald-600 py-4 rounded-xl font-black text-white";
-            } catch (e) {}
+                
+                document.getElementById('auth').innerText = data.is_auth ? "SİSTEM BAĞLI" : "GİRİŞ GEREKLİ!";
+                document.getElementById('auth').className = data.is_auth ? "text-[10px] font-bold text-green-500" : "text-[10px] font-bold text-red-500";
+                
+                document.getElementById('userCount').innerText = data.count + " KİŞİ KAYITLI";
+                if(!document.getElementById('linkInput').value) document.getElementById('linkInput').value = data.my_link;
+            } catch(e) {}
         }
         setInterval(refresh, 2000);
 
-        async function sendCode() {
-            const phone = document.getElementById('phone').value;
-            const res = await fetch('/login/send-code', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone})});
-            if((await res.json()).status === 'success') {
-                document.getElementById('s1').classList.add('hidden');
-                document.getElementById('s2').classList.remove('hidden');
+        async function saveLink() {
+            const link = document.getElementById('linkInput').value;
+            await fetch('/update-link', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({link})});
+            alert("Link kaydedildi.");
+        }
+
+        async function startManualAds() {
+            if(confirm("Listedeki herkese mesaj gönderilsin mi?")) {
+                await fetch('/manual-ads', {method:'POST'});
             }
-        }
-
-        async function verifyCode() {
-            const code = document.getElementById('code').value;
-            const res = await fetch('/login/verify-code', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code})});
-            const data = await res.json();
-            if(data.status === 'success') location.reload();
-            if(data.status === '2fa_required') {
-                document.getElementById('s2').classList.add('hidden');
-                document.getElementById('s3').classList.remove('hidden');
-            }
-        }
-
-        async function verify2FA() {
-            const password = document.getElementById('pass').value;
-            const res = await fetch('/login/verify-2fa', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password})});
-            if((await res.json()).status === 'success') location.reload();
-        }
-
-        async function toggle() { await fetch('/toggle', {method: 'POST'}); }
-        async function save() {
-            const link = document.getElementById('l').value;
-            await fetch('/update', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({link})});
-            alert("Kanal linkin kaydedildi!");
         }
     </script>
 </body>
