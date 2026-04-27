@@ -2,55 +2,55 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>S4S Ultimate Matrix</title>
+    <title>S4S Matrix Panel</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .terminal { background: #020617; height: 300px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; color: #10b981; }
+        .terminal { background: #020617; height: 350px; overflow-y: auto; font-family: monospace; border: 1px solid #1e293b; color: #10b981; }
         .log-line { padding: 4px 12px; border-bottom: 1px solid #0f172a; font-size: 11px; }
+        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+        .active-pulse { animation: pulse-green 2s infinite; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 p-4 font-sans">
+<body class="bg-slate-950 text-slate-200 p-4">
     <div class="max-w-4xl mx-auto space-y-6">
         
-        <!-- ÜST PANEL VE GİRİŞ -->
-        <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
-            <div class="flex justify-between items-center">
-                <h1 class="text-2xl font-black text-blue-500 italic underline">S4S ULTIMATE</h1>
-                <div id="authStatus" class="text-xs font-bold px-3 py-1 rounded-full">YÜKLENİYOR...</div>
+        <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-2xl flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-black text-blue-500 italic tracking-tighter">S4S ULTIMATE</h1>
+                <div id="authStatus" class="text-xs font-bold px-3 py-1 rounded-full mt-1">YÜKLENİYOR...</div>
             </div>
+            <button onclick="toggleOto()" id="otoBtn" class="bg-slate-800 px-6 py-3 rounded-xl font-black text-xs transition-all">YÜKLENİYOR...</button>
+        </div>
 
-            <!-- GİRİŞ FORMU -->
-            <div id="loginForm" class="hidden border-2 border-yellow-600/30 p-4 rounded-xl space-y-3 bg-black/20">
-                <h2 class="text-yellow-500 text-sm font-bold italic">🔐 Telegram Girişi Gerekli:</h2>
-                <div id="step-phone" class="flex gap-2">
-                    <input id="phone" type="text" placeholder="+905..." class="flex-1 bg-slate-950 border border-slate-800 p-2 rounded-lg text-sm">
-                    <button onclick="sendCode()" class="bg-yellow-600 px-4 py-2 rounded-lg text-black font-bold text-xs">Kod Gönder</button>
-                </div>
-                <div id="step-code" class="hidden flex gap-2">
-                    <input id="code" type="text" placeholder="SMS Kodu" class="flex-1 bg-slate-950 border border-slate-800 p-2 rounded-lg text-sm">
-                    <button onclick="verifyCode()" class="bg-yellow-500 px-4 py-2 rounded-lg text-black font-bold text-xs">Onayla</button>
-                </div>
-                <div id="step-2fa" class="hidden flex gap-2">
-                    <input id="pass" type="password" placeholder="2FA Şifresi" class="flex-1 bg-slate-950 border border-slate-800 p-2 rounded-lg text-sm">
-                    <button onclick="verify2fa()" class="bg-red-600 px-4 py-2 rounded-lg font-bold text-xs">Giriş</button>
-                </div>
+        <!-- GİRİŞ FORMU -->
+        <div id="loginBox" class="hidden bg-slate-900 p-6 rounded-2xl border-2 border-yellow-600/30 space-y-4">
+            <h2 class="text-yellow-500 font-bold italic">🔐 Telegram Girişi Gerekli</h2>
+            <div id="s1" class="flex gap-2">
+                <input id="phone" type="text" placeholder="+905..." class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
+                <button onclick="sendCode()" class="bg-yellow-600 px-6 rounded-xl font-bold text-black">Kod Gönder</button>
+            </div>
+            <div id="s2" class="hidden flex gap-2">
+                <input id="code" type="text" placeholder="SMS Kodu" class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
+                <button onclick="verifyCode()" class="bg-yellow-500 px-6 rounded-xl font-bold text-black">Onayla</button>
+            </div>
+            <div id="s3" class="hidden flex gap-2">
+                <input id="pass" type="password" placeholder="2FA Şifresi" class="flex-1 bg-slate-950 border border-slate-800 p-3 rounded-xl outline-none">
+                <button onclick="verify2fa()" class="bg-red-600 px-6 rounded-xl font-bold">Giriş</button>
             </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-4">
-                <div>
-                    <label class="text-[10px] font-bold text-slate-500 uppercase">Reklam Linkin</label>
-                    <input id="lInput" type="text" class="w-full bg-black border border-slate-700 p-2 mt-1 rounded-lg text-xs outline-none">
-                </div>
-                <button onclick="saveLink()" class="w-full bg-blue-600 py-2 rounded-xl font-bold text-xs">KAYDET</button>
-                <div class="pt-4">
-                    <button onclick="startManual()" class="w-full bg-emerald-600 py-4 rounded-xl font-black text-white text-xs">TOPLU MESAJ AT (.ads)</button>
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Ayarlar</h3>
+                <input id="l" type="text" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm outline-none">
+                <button onclick="save()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold">LİNKİ KAYDET</button>
+                <div class="text-[10px] text-slate-500 italic mt-2 text-center">
+                    Komutlar: .add .delete .all .oto on/off
                 </div>
             </div>
 
             <div class="md:col-span-2 space-y-2">
-                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Canlı Terminal</h3>
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Canlı İşlem Terminali</h3>
                 <div id="logs" class="terminal rounded-2xl shadow-inner"></div>
             </div>
         </div>
@@ -66,18 +66,26 @@
                 document.getElementById('logs').scrollTop = document.getElementById('logs').scrollHeight;
 
                 const auth = document.getElementById('authStatus');
-                const form = document.getElementById('loginForm');
-                
+                const loginBox = document.getElementById('loginBox');
                 if(data.is_auth) {
                     auth.innerText = "SİSTEM BAĞLI";
                     auth.className = "text-xs font-bold px-3 py-1 rounded-full bg-green-900/20 text-green-500";
-                    form.classList.add('hidden');
+                    loginBox.classList.add('hidden');
                 } else {
                     auth.innerText = "GİRİŞ GEREKLİ";
                     auth.className = "text-xs font-bold px-3 py-1 rounded-full bg-red-900/20 text-red-500";
-                    form.classList.remove('hidden');
+                    loginBox.classList.remove('hidden');
                 }
-                if(!document.getElementById('lInput').value) document.getElementById('lInput').value = data.my_link;
+
+                const otoBtn = document.getElementById('otoBtn');
+                if(data.is_oto) {
+                    otoBtn.innerText = "OTO PİLOTU DURDUR";
+                    otoBtn.className = "bg-green-600 px-6 py-3 rounded-xl font-black text-xs text-white active-pulse";
+                } else {
+                    otoBtn.innerText = "OTO PİLOTU BAŞLAT";
+                    otoBtn.className = "bg-red-600 px-6 py-3 rounded-xl font-black text-xs text-white";
+                }
+                if(!document.getElementById('l').value) document.getElementById('l').value = data.my_link;
             } catch(e) {}
         }
         setInterval(refresh, 2000);
@@ -86,7 +94,7 @@
             const phone = document.getElementById('phone').value;
             const res = await fetch('/login/send-code', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone})});
             const d = await res.json();
-            if(d.status==='success') { document.getElementById('step-phone').classList.add('hidden'); document.getElementById('step-code').classList.remove('hidden'); }
+            if(d.status==='success') { document.getElementById('s1').classList.add('hidden'); document.getElementById('s2').classList.remove('hidden'); }
             else alert(d.message);
         }
 
@@ -95,7 +103,7 @@
             const res = await fetch('/login/verify-code', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code})});
             const d = await res.json();
             if(d.status==='success') location.reload();
-            else if(d.status==='2fa_required') { document.getElementById('step-code').classList.add('hidden'); document.getElementById('step-2fa').classList.remove('hidden'); }
+            else if(d.status==='2fa_required') { document.getElementById('s2').classList.add('hidden'); document.getElementById('s3').classList.remove('hidden'); }
             else alert(d.message);
         }
 
@@ -106,13 +114,12 @@
             if(d.status==='success') location.reload(); else alert(d.message);
         }
 
-        async function saveLink() {
-            const link = document.getElementById('lInput').value;
-            await fetch('/update-link', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({link})});
+        async function toggleOto() { await fetch('/toggle-oto', {method: 'POST'}); }
+        async function save() {
+            const link = document.getElementById('l').value;
+            await fetch('/update-link', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({link})});
             alert("Kaydedildi!");
         }
-
-        async function startManual() { if(confirm("Emin misin?")) fetch('/manual-ads', {method:'POST'}); }
     </script>
 </body>
 </html>
