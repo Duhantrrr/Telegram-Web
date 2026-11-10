@@ -18,12 +18,13 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
         .stat-label { font-size: 12px; color: #94a3b8; }
         .stat-value { font-size: 16px; font-weight: 700; margin-top: 4px; color: #f1f5f9; }
-        .btn { padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: 0.2s; }
+        .btn { padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; }
         .btn-start { background: #10b981; color: #042f2e; }
         .btn-stop { background: #ef4444; color: #450a0a; }
         .btn-blue { background: #0284c7; color: white; }
         input { background: #0f172a; border: 1px solid #334155; padding: 10px; border-radius: 8px; color: #f8fafc; font-size: 14px; width: 100%; outline: none; }
         .input-group { display: flex; gap: 8px; margin-top: 8px; }
+        .col-group { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
         #log-box { background: #020617; border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; height: 320px; overflow-y: auto; color: #a5f3fc; border: 1px solid #0f172a; display: flex; flex-direction: column; gap: 4px; }
         .log-entry { word-break: break-all; }
         #loginCard { border: 1px solid #f59e0b; background: #181c2e; }
@@ -34,24 +35,24 @@
         <header>
             <div>
                 <h1>Ads Autopilot Dashboard</h1>
-                <p style="font-size: 12px; color: #94a3b8;">15 sn aralıklı otomatik takas & log</p>
+                <p style="font-size: 12px; color: #94a3b8;">15 sn aralıklı otomatik takas</p>
             </div>
             <span id="authBadge" class="badge badge-inactive">Kontrol ediliyor...</span>
         </header>
 
-        <!-- GİRİŞ FORMU (Giriş yapılmamışsa görünür) -->
+        <!-- TELEGRAM GİRİŞ FORMU -->
         <div class="card" id="loginCard" style="display: none;">
             <h3 style="font-size: 14px; color: #f59e0b; margin-bottom: 6px;">🔑 Telegram Oturumu Aç (Tek Seferlik)</h3>
-            <p style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">Numaranı yaz ve kod iste, bir kere giriş yapınca hep açık kalır.</p>
+            <p style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">Kod Gönder'e bas, ardından gelen kod ve varsa 2FA şifreni yazıp Giriş Yap.</p>
             
             <div id="stepPhone" class="input-group">
                 <input type="text" id="phoneInput" value="+905315151419">
                 <button class="btn btn-blue" onclick="sendCode()">Kod Gönder</button>
             </div>
 
-            <div id="stepCode" style="display: none; margin-top: 10px;">
-                <div class="input-group">
-                    <input type="text" id="codeInput" placeholder="Telegram kodu">
+            <div id="stepCode" style="display: none;">
+                <div class="col-group">
+                    <input type="text" id="codeInput" placeholder="Telegram kodu (örn: 12345)">
                     <input type="password" id="passInput" placeholder="2FA Şifresi (varsa)">
                     <button class="btn btn-start" onclick="verifyCode()">Giriş Yap</button>
                 </div>
@@ -97,29 +98,47 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone })
             });
+            const data = await res.json();
             if (res.ok) {
+                // Tarayıcı hafızasına güvenle kaydet
+                sessionStorage.setItem('authData', JSON.stringify(data));
                 alert("Kod Telegram uygulamana gönderildi!");
                 document.getElementById('stepCode').style.display = 'block';
             } else {
-                alert("Kod gönderme hatası!");
+                alert("Hata: " + (data.detail || "Kod gönderilemedi"));
             }
         }
 
         async function verifyCode() {
             const code = document.getElementById('codeInput').value.trim();
             const password = document.getElementById('passInput').value.trim();
+            const savedAuth = JSON.parse(sessionStorage.getItem('authData') || '{}');
+
+            if (!savedAuth.phone_code_hash) {
+                alert("Lütfen önce 'Kod Gönder' butonuna basın!");
+                return;
+            }
+
             const res = await fetch('/auth/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, password })
+                body: JSON.stringify({
+                    phone: savedAuth.phone,
+                    phone_code_hash: savedAuth.phone_code_hash,
+                    temp_session: savedAuth.temp_session,
+                    code: code,
+                    password: password
+                })
             });
+
             const data = await res.json();
             if (res.ok) {
-                alert("Giriş Başarılı! Oturum kaydedildi.");
+                alert("Tebrikler! Giriş Başarılı, sistem bağlandı.");
                 document.getElementById('loginCard').style.display = 'none';
+                sessionStorage.removeItem('authData');
                 fetchData();
             } else {
-                alert("Hata: " + (data.detail || "Giriş yapılamadı"));
+                alert("Hata: " + (data.detail || "Giriş başarısız!"));
             }
         }
 
