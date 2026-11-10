@@ -2,21 +2,27 @@ import os
 import asyncio
 import random
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events, errors
+from telethon.sessions import StringSession
 import uvicorn
 
-# Vercel'in ilk olarak aradığı satır en başa alındı:
 app = FastAPI()
 
 # --- TELEGRAM API BİLGİLERİ ---
 API_ID = int(os.environ.get("API_ID", 16896485))
 API_HASH = os.environ.get("API_HASH", "29b5bb9351b4cb3738d73abaf5eb28ca")
+SESSION_STR = os.environ.get("SESSION_STRING", "")
 
-# Vercel read-only disk koruması (/tmp dizini)
-SESSION_NAME = os.path.join("/tmp", "bot_session") if os.environ.get("VERCEL") else "bot_session"
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+# StringSession öncelikli, yoksa /tmp kullanır
+client = TelegramClient(StringSession(SESSION_STR) if SESSION_STR else os.path.join("/tmp", "bot_session"), API_ID, API_HASH)
+
+# Giriş adımı hafızası
+auth_state = {
+    "phone": None,
+    "phone_code_hash": None
+}
 
 config = {
     "channel_link": "https://t.me/+vbR5re1Xa-VkOWE0",
@@ -36,7 +42,6 @@ def add_log(msg: str):
         config["logs"].pop(0)
     print(entry)
 
-# ids.txt dosyasından hedefleri oku
 def get_targets():
     targets = []
     try:
@@ -46,8 +51,6 @@ def get_targets():
                     val = line.strip().replace("https://t.me/", "").replace("@", "")
                     if val:
                         targets.append(int(val) if val.isdigit() else val)
-        else:
-            add_log("⚠️ ids.txt bulunamadı!")
     except Exception as e:
         add_log(f"❌ ids.txt okuma hatası: {e}")
     return targets
@@ -69,14 +72,12 @@ async def hourly_broadcast_task():
                 try:
                     await client.send_message(user, config["promo_message"])
                     add_log(f"✉️ İletildi: {user}")
-                    
-                    # Spam koruması
                     await asyncio.sleep(random.uniform(6, 12))
                 except errors.FloodWaitError as e:
-                    add_log(f"🕒 Spam engeli: {e.seconds} saniye bekleniyor...")
+                    add_log(f"🕒 Spam engeli: {e.seconds} sn bekleniyor...")
                     await asyncio.sleep(e.seconds + 5)
                 except errors.UserDeactivatedBanError:
-                    add_log("❌ Hesap kısıtlandı!")
+                    add_log("❌ Hesap sınırlandırıldı!")
                     config["is_auto_pilot_on"] = False
                     break
                 except Exception as e:
@@ -87,59 +88,94 @@ async def hourly_broadcast_task():
                 add_log("💤 Tur bitti. 1 saat (3600 sn) uyku modu.")
                 await asyncio.sleep(3600)
     except asyncio.CancelledError:
-        add_log("🛑 Broadcast döngüsü durduruldu.")
+        add_log("🛑 Broadcast durduruldu.")
     except Exception as e:
         add_log(f"❌ Kritik hata: {e}")
 
-# --- TETİKLENME (KARŞI TARAF LİNK ATTIĞINDA) ---
+# --- TETİKLENME (GELEN LİNK) ---
 @client.on(events.NewMessage(incoming=True))
 async def handle_response(event):
     if not event.is_private:
         return
-    
     text = (event.raw_text or "").lower()
     if "t.me/" in text or "telegram.me/" in text:
         try:
-            # 1. Gelen mesajı @ratlogscloud kanalına ilet
             fwd = await client.forward_messages(config["storage_channel"], event.message)
-            
-            # 2. Mesaj linkini çıkar
             chan_name = config["storage_channel"].replace("@", "").strip()
             done_link = f"https://t.me/{chan_name}/{fwd.id}"
             
-            # 3. Sırayla yanıt gönder
             await event.reply(config["promo_message"])
             await asyncio.sleep(1)
             await event.respond("Go")
             await asyncio.sleep(1)
             await event.respond(f"Done {done_link}")
-            
             add_log(f"✅ Karşılıklı reklam yapıldı: {event.chat_id} -> {done_link}")
-        except errors.FloodWaitError as e:
-            add_log(f"🕒 FloodWait: {e.seconds} sn")
         except Exception as e:
             add_log(f"❌ Yanıt hatası ({event.chat_id}): {e}")
 
-# --- VERCEL İÇİN STARTUP & SHUTDOWN ---
 @app.on_event("startup")
 async def startup():
     try:
         await client.connect()
         if await client.is_user_authorized():
-            add_log("🚀 Telethon bağlandı, oturum AKTİF.")
-        else:
-            add_log("⚠️ Oturum açık değil!")
+            add_log("🚀 Telethon AKTİF, oturum hazır!")
     except Exception as e:
-        add_log(f"⚠️ Bağlantı hatası: {e}")
+        add_log(f"⚠️ Başlangıç bağlantı hatası: {e}")
 
-@app.on_event("shutdown")
-async def shutdown():
-    global broadcast_task
-    if broadcast_task and not broadcast_task.done():
-        broadcast_task.cancel()
-    await client.disconnect()
+# --- WEB PANEL GİRİŞ ENDPOINTLERİ ---
+@app.post("/auth/send-code")
+async def send_code(data: dict):
+    phone = data.get("phone", "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Telefon numarası gerekli!")
+    
+    if not client.is_connected():
+        await client.connect()
+        
+    try:
+        res = await client.send_code_request(phone)
+        auth_state["phone"] = phone
+        auth_state["phone_code_hash"] = res.phone_code_hash
+        add_log(f"📩 Giriş kodu gönderildi: {phone}")
+        return {"status": "ok", "message": "Kod gönderildi!"}
+    except Exception as e:
+        add_log(f"❌ Kod gönderme hatası: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-# --- WEB PANEL ENDPOINT'LERİ ---
+@app.post("/auth/verify")
+async def verify_code(data: dict):
+    code = data.get("code", "").strip()
+    password = data.get("password", "").strip() # 2FA varsa
+    
+    if not auth_state["phone"] or not auth_state["phone_code_hash"]:
+        raise HTTPException(status_code=400, detail="Önce kod göndermelisiniz!")
+        
+    try:
+        await client.sign_in(
+            phone=auth_state["phone"],
+            code=code,
+            phone_code_hash=auth_state["phone_code_hash"]
+        )
+    except errors.SessionPasswordNeededError:
+        if not password:
+            return {"status": "2fa_required", "message": "2 Adımlı Doğrulama (2FA) şifresi gerekli!"}
+        await client.sign_in(password=password)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Oturum String'ini al
+    string_session = ""
+    if isinstance(client.session, StringSession):
+        string_session = client.session.save()
+
+    add_log("🎉 TEBRİKLER! Telegram girişi başarıyla tamamlandı.")
+    return {
+        "status": "ok",
+        "message": "Giriş Başarılı!",
+        "session_string": string_session
+    }
+
+# --- WEB PANEL YOLLARI ---
 @app.get("/")
 async def index():
     if not os.path.exists("index.html"):
@@ -149,10 +185,18 @@ async def index():
 
 @app.get("/get-data")
 async def get_data():
+    is_auth = False
+    try:
+        if not client.is_connected():
+            await client.connect()
+        is_auth = await client.is_user_authorized()
+    except:
+        pass
+
     return {
         "logs": config["logs"],
         "is_auto": config["is_auto_pilot_on"],
-        "is_auth": await client.is_user_authorized() if client.is_connected() else False,
+        "is_auth": is_auth,
         "promo_link": config["promo_message"],
         "target_count": len(get_targets())
     }
