@@ -1,175 +1,183 @@
-from fastapi import FastAPI, BackgroundTasks, Request
+ import os
+import asyncio
+import random
+from contextlib import asynccontextmanager
+from datetime import datetime
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events, errors
-from telethon.errors import SessionPasswordNeededError
-import asyncio
-import os
 import uvicorn
-import re
-from datetime import datetime
 
-app = FastAPI()
+# --- TELEGRAM API BİLGİLERİ ---
+API_ID = int(os.environ.get("API_ID", 16896485))
+API_HASH = os.environ.get("API_HASH", "29b5bb9351b4cb3738d73abaf5eb28ca")
+SESSION_NAME = os.environ.get("SESSION_NAME", "bot_session")
 
-# --- AYARLAR ---
-api_id = 27861882
-api_hash = 'd1c630d699c775e846bf64aadd18aefd'
-client = TelegramClient('railway_session', api_id, api_hash)
+client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
-# Sistem Belleği
-auth_cache = {"phone": None, "hash": None}
 config = {
-    "my_link": "https://t.me/+TwaTRIkzseJINTdk",
-    "storage": "@adscloud1",
-    "ids_file": "ids.txt",
-    "is_oto_active": False, # Oto pilot durumu
+    "channel_link": "https://t.me/+vbR5re1Xa-VkOWE0",
+    "storage_channel": "@ratlogscloud",
+    "promo_message": "Ads to ads @tgciyim https://t.me/+vbR5re1Xa-VkOWE0",
+    "is_auto_pilot_on": False,
     "logs": []
 }
 
-def add_log(msg):
+broadcast_task: asyncio.Task | None = None
+
+def add_log(msg: str):
     time_str = datetime.now().strftime("%H:%M:%S")
     entry = f"[{time_str}] {msg}"
     config["logs"].append(entry)
-    if len(config["logs"]) > 50: config["logs"].pop(0)
+    if len(config["logs"]) > 100:
+        config["logs"].pop(0)
     print(entry)
 
-def get_list():
-    if not os.path.exists(config["ids_file"]): return []
-    with open(config["ids_file"], "r") as f:
-        return [line.strip().replace("@", "") for line in f if line.strip()]
-
-def save_list(lst):
-    with open(config["ids_file"], "w") as f:
-        for u in lst: f.write(f"{u}\n")
-
-@app.on_event("startup")
-async def startup():
-    await client.connect()
-    add_log("🚀 Sistem Başlatıldı. Giriş bekleniyor...")
-
-# --- GİRİŞ API SİSTEMİ ---
-@app.post("/login/send-code")
-async def send_code(data: dict):
-    phone = data.get("phone")
-    auth_cache["phone"] = phone
+# ids.txt dosyasından hem ID hem de Kullanıcı Adlarını okur
+def get_targets():
+    targets = []
     try:
-        res = await client.send_code_request(phone)
-        auth_cache["hash"] = res.phone_code_hash
-        add_log(f"📲 Kod istendi: {phone}")
-        return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/login/verify-code")
-async def verify_code(data: dict):
-    try:
-        await client.sign_in(auth_cache["phone"], data.get("code"), phone_code_hash=auth_cache["hash"])
-        add_log("✅ Giriş başarılı!")
-        return {"status": "success"}
-    except SessionPasswordNeededError: return {"status": "2fa_required"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-@app.post("/login/verify-2fa")
-async def verify_2fa(data: dict):
-    try:
-        await client.sign_in(password=data.get("password"))
-        add_log("✅ 2FA Doğrulandı.")
-        return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
-
-# --- OTO PİLOT GÖREVİ (Arka Planda Sürekli Çalışır) ---
-async def oto_pilot_loop():
-    while True:
-        if config["is_oto_active"]:
-            users = get_list()
-            add_log(f"🤖 Oto-Pilot turu başladı: {len(users)} kişi.")
-            for u in users:
-                if not config["is_oto_active"]: break
-                try:
-                    await client.send_message(u, "Ads to ads?")
-                    await asyncio.sleep(8) # Güvenli hız
-                except errors.FloodWaitError as e:
-                    await asyncio.sleep(e.seconds)
-                except: continue
-            add_log("💤 Tur bitti. 1 saat uyku.")
-            await asyncio.sleep(7200) # 1 saat bekleme
+        if os.path.exists("ids.txt"):
+            with open("ids.txt", "r", encoding="utf-8") as f:
+                for line in f:
+                    val = line.strip().replace("https://t.me/", "").replace("@", "")
+                    if val:
+                        targets.append(int(val) if val.isdigit() else val)
         else:
-            await asyncio.sleep(10)
+            add_log("⚠️ ids.txt bulunamadı!")
+    except Exception as e:
+        add_log(f"❌ ids.txt okuma hatası: {e}")
+    return targets
 
-# --- TELEGRAM KOMUTLARI (.add, .delete, .all, .oto) ---
-@client.on(events.NewMessage(outgoing=True, pattern=r'^\.'))
-async def cmd_handler(event):
-    text = event.raw_text.lower().split()
-    cmd = text[0]
-    users = get_list()
+# --- 1 SAATTE BİR LİSTEYE MESAJ ATMA ---
+async def hourly_broadcast_task():
+    try:
+        while config["is_auto_pilot_on"]:
+            targets = get_targets()
+            if not targets:
+                add_log("⚠️ Liste boş, 15 dk sonra tekrar denenecek.")
+                await asyncio.sleep(900)
+                continue
 
-    if cmd == ".add" and len(text) > 1:
-        u = text[1].replace("@", "")
-        if u not in users:
-            users.append(u)
-            save_list(users)
-            await event.edit(f"✅ **@{u}** eklendi.")
-        else: await event.edit("⚠️ Zaten listede.")
-    elif cmd == ".all":
-        msg = f"📋 **LİSTE:**\n\n" + "\n".join([f"@{u}" for u in users])
-        await event.edit(msg)
-    elif cmd == ".oto":
-        if len(text) > 1:
-            config["is_oto_active"] = (text[1] == "on")
-            await event.edit(f"🤖 **Oto-Pilot:** {'AÇIK' if config['is_oto_active'] else 'KAPALI'}")
+            add_log(f"📢 Döngü başladı: {len(targets)} kullanıcı hedefleniyor.")
+            for user in targets:
+                if not config["is_auto_pilot_on"]:
+                    break
+                try:
+                    await client.send_message(user, config["promo_message"])
+                    add_log(f"✉️ İletildi: {user}")
+                    
+                    # Spam koruması (6-12 saniye bekleme)
+                    await asyncio.sleep(random.uniform(6, 12))
+                except errors.FloodWaitError as e:
+                    add_log(f"🕒 Spam engeli: {e.seconds} saniye bekleniyor...")
+                    await asyncio.sleep(e.seconds + 5)
+                except errors.UserDeactivatedBanError:
+                    add_log("❌ Hesap Telegram tarafından sınırlandırıldı!")
+                    config["is_auto_pilot_on"] = False
+                    break
+                except Exception as e:
+                    add_log(f"⚠️ Hata ({user}): {e}")
+                    continue
 
-# --- PUSU MODU (LİNK GELİNCE SİLSİLE CEVAP) ---
+            if config["is_auto_pilot_on"]:
+                add_log("💤 Tur bitti. 1 saat (3600 sn) uyku modu.")
+                await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        add_log("🛑 Broadcast döngüsü durduruldu.")
+    except Exception as e:
+        add_log(f"❌ Kritik hata (Broadcast): {e}")
+
+# --- TETİKLENME (KARŞI TARAF LİNK ATTIĞINDA) ---
 @client.on(events.NewMessage(incoming=True))
-async def responder(event):
-    if not event.is_private: return
-    text = event.raw_text.lower()
-    sender = await event.get_sender()
-    name = (sender.first_name or "Biri")
-
+async def handle_response(event):
+    if not event.is_private:
+        return
+    
+    text = (event.raw_text or "").lower()
     if "t.me/" in text or "telegram.me/" in text:
         try:
-            add_log(f"🔥 Link Yakalandı: {name}")
-            await event.reply(config["my_link"])
+            # 1. Gelen mesajı @ratlogscloud kanalına ilet
+            fwd = await client.forward_messages(config["storage_channel"], event.message)
+            
+            # 2. Mesaj linkini çıkar
+            chan_name = config["storage_channel"].replace("@", "").strip()
+            done_link = f"https://t.me/{chan_name}/{fwd.id}"
+            
+            # 3. Sırayla yanıt gönder
+            await event.reply(config["promo_message"])
             await asyncio.sleep(1)
-            await event.respond("Go?")
+            await event.respond("Go")
             await asyncio.sleep(1)
-            fwd = await client.forward_messages(config["storage"], event.message)
-            chan = config["storage"].replace("@", "")
-            await event.respond(f"Done https://t.me/{chan}/{fwd.id}")
-            await asyncio.sleep(1)
-            await event.respond("You?")
-            add_log(f"🎯 Silsile Tamamlandı: {name}")
-        except: pass
-    elif any(w in text for w in ["ads", "go", "link", "ok"]):
-        await event.reply(config["my_link"])
-        await asyncio.sleep(1)
-        await event.respond("Go?")
+            await event.respond(f"Done {done_link}")
+            
+            add_log(f"✅ Karşılıklı reklam tamamlandı: {event.chat_id} -> {done_link}")
+        except errors.FloodWaitError as e:
+            add_log(f"🕒 FloodWait: {e.seconds} sn")
+        except Exception as e:
+            add_log(f"❌ Yanıt hatası ({event.chat_id}): {e}")
 
-# --- WEB PANEL YOLLARI ---
+# --- FASTAPI LIFESPAN ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await client.connect()
+    if await client.is_user_authorized():
+        add_log("🚀 Telethon bağlandı, oturum AKTİF.")
+    else:
+        add_log("⚠️ Oturum açık değil! Session dosyasını kontrol edin.")
+    
+    yield
+    
+    global broadcast_task
+    if broadcast_task and not broadcast_task.done():
+        broadcast_task.cancel()
+    await client.disconnect()
+    add_log("🔌 Telethon bağlantısı kapatıldı.")
+
+app = FastAPI(lifespan=lifespan)
+
+# --- PANEL YOLLARI ---
 @app.get("/")
 async def index():
+    if not os.path.exists("index.html"):
+        return HTMLResponse("<h3>index.html dosyası bulunamadı!</h3>", status_code=404)
     with open("index.html", "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
-@app.get("/status")
-async def get_status():
+@app.get("/get-data")
+async def get_data():
     return {
         "logs": config["logs"],
-        "is_auth": await client.is_user_authorized(),
-        "is_oto": config["is_oto_active"],
-        "my_link": config["my_link"]
+        "is_auto": config["is_auto_pilot_on"],
+        "is_auth": await client.is_user_authorized() if client.is_connected() else False,
+        "promo_link": config["promo_message"],
+        "target_count": len(get_targets())
     }
 
-@app.post("/toggle-oto")
-async def toggle_oto():
-    config["is_oto_active"] = not config["is_oto_active"]
-    return {"status": "ok"}
+@app.post("/toggle")
+async def toggle():
+    global broadcast_task
+    config["is_auto_pilot_on"] = not config["is_auto_pilot_on"]
+    
+    if config["is_auto_pilot_on"]:
+        if broadcast_task is None or broadcast_task.done():
+            broadcast_task = asyncio.create_task(hourly_broadcast_task())
+            add_log("▶️ Otomatik Pilot BAŞLATILDI.")
+    else:
+        if broadcast_task and not broadcast_task.done():
+            broadcast_task.cancel()
+            broadcast_task = None
+        add_log("⏸️ Otomatik Pilot DURDURULDU.")
+        
+    return {"status": "ok", "is_auto": config["is_auto_pilot_on"]}
 
-@app.post("/update-link")
-async def update_link(data: dict):
-    config["my_link"] = data.get("link")
+@app.post("/update")
+async def update(data: dict):
+    if "link" in data and data["link"].strip():
+        config["promo_message"] = data.get("link").strip()
+        add_log(f"🔗 Mesaj güncellendi: {config['promo_message']}")
     return {"status": "ok"}
 
 if __name__ == "__main__":
-    # Arka plan görevini başlat
-    loop = asyncio.get_event_loop()
-    loop.create_task(oto_pilot_loop())
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
