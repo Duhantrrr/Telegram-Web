@@ -17,11 +17,9 @@ BASE_DIR = "/tmp" if IS_VERCEL else "."
 SESSION_FILE = os.path.join(BASE_DIR, "session_token.txt")
 STATE_FILE = os.path.join(BASE_DIR, "bot_state.json")
 
-# --- TELEGRAM BİLGİLERİ ---
 API_ID = int(os.environ.get("API_ID", 16896485))
 API_HASH = os.environ.get("API_HASH", "29b5bb9351b4cb3738d73abaf5eb28ca")
 
-# Oturumu önce ENV'den, sonra dosyadan oku (Kalıcı Giriş)
 def get_saved_session():
     env_sess = os.environ.get("SESSION_STRING", "").strip()
     if env_sess:
@@ -34,10 +32,7 @@ def get_saved_session():
             pass
     return ""
 
-saved_session = get_saved_session()
-client = TelegramClient(StringSession(saved_session), API_ID, API_HASH)
-
-auth_state = {"phone": None, "phone_code_hash": None}
+client = TelegramClient(StringSession(get_saved_session()), API_ID, API_HASH)
 
 config = {
     "channel_link": "https://t.me/+vbR5re1Xa-VkOWE0",
@@ -49,13 +44,12 @@ config = {
 
 broadcast_task: asyncio.Task | None = None
 
-# Durumu Kaydet & Yükle (Sayfa yenilenince durmaması için)
 def save_state():
     try:
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump({"is_auto": config["is_auto_pilot_on"], "promo": config["promo_message"]}, f)
-    except Exception as e:
-        print(f"State save error: {e}")
+    except:
+        pass
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -64,8 +58,8 @@ def load_state():
                 data = json.load(f)
                 config["is_auto_pilot_on"] = data.get("is_auto", False)
                 config["promo_message"] = data.get("promo", config["promo_message"])
-        except Exception as e:
-            print(f"State load error: {e}")
+        except:
+            pass
 
 load_state()
 
@@ -108,12 +102,11 @@ async def hourly_broadcast_task():
                     await client.send_message(user, config["promo_message"])
                     add_log(f"✉️ ({index}/{len(targets)}) Gönderildi: @{user}")
                     
-                    # TAM 15 SANİYE BEKLEME
                     add_log("⏳ 15 saniye bekleniyor...")
                     await asyncio.sleep(15)
 
                 except errors.FloodWaitError as e:
-                    add_log(f"🕒 Telegram FloodWait: {e.seconds} saniye bekleniyor...")
+                    add_log(f"🕒 Telegram FloodWait: {e.seconds} sn bekleniyor...")
                     await asyncio.sleep(e.seconds + 5)
                 except errors.UserDeactivatedBanError:
                     add_log("❌ HESAP SINIRLANDIRILDI! Sistem durduruldu.")
@@ -143,10 +136,9 @@ async def handle_response(event):
     lower_text = text.lower()
     user_id = event.chat_id
 
-    # Gelen her mesajı loga yaz
     add_log(f"📩 Gelen Mesaj ({user_id}): \"{text}\"")
 
-    # 1. DURUM: Karşı taraf Link attıysa -> Ratlogscloud'a at ve Done linki ver
+    # 1. Link attıysa
     if "t.me/" in lower_text or "telegram.me/" in lower_text:
         try:
             fwd = await client.forward_messages(config["storage_channel"], event.message)
@@ -163,16 +155,15 @@ async def handle_response(event):
             add_log(f"❌ Link yanıtlama hatası ({user_id}): {e}")
         return
 
-    # 2. DURUM: Karşı taraf onay kelimeleri yazdıysa (ok, ready, yes, yeah, go vb.)
+    # 2. Onay kelimeleri yazdıysa (ok, ready, yes, yeah, go vb.)
     trigger_words = r'\b(ok|ready|yes|yeah|go|tamam|olur|send|link|yolla|at|anlastik|anlaştık)\b'
     if re.search(trigger_words, lower_text):
         try:
             await event.reply(config["promo_message"])
-            add_log(f"💬 Tetikleyici kelime yakalandı (\"{text}\") -> Reklam linki gönderildi.")
+            add_log(f"💬 Onay kelimesi yakalandı (\"{text}\") -> Reklam yollandı.")
         except Exception as e:
             add_log(f"❌ Kelime yanıt hatası ({user_id}): {e}")
 
-# --- BAŞLANGIÇ ---
 @app.on_event("startup")
 async def startup():
     global broadcast_task
@@ -180,62 +171,88 @@ async def startup():
         await client.connect()
         if await client.is_user_authorized():
             add_log("🚀 Telegram oturumu AKTİF!")
-            # Eğer önceki oturumda açık bırakıldıysa görevi otomatik yeniden başlat
             if config["is_auto_pilot_on"] and (broadcast_task is None or broadcast_task.done()):
                 broadcast_task = asyncio.create_task(hourly_broadcast_task())
-                add_log("▶️ Otomatik Pilot kaldığı yerden devam ediyor.")
         else:
             add_log("⚠️ Oturum açık değil. Lütfen panelden giriş yapın.")
     except Exception as e:
         add_log(f"⚠️ Bağlantı hatası: {e}")
 
-# --- GİRİŞ İŞLEMLERİ ---
+# --- VERCEL İÇİN GÜVENLİ GİRİŞ SİSTEMİ ---
 @app.post("/auth/send-code")
 async def send_code(data: dict):
     phone = data.get("phone", "").strip()
     if not phone:
         raise HTTPException(status_code=400, detail="Telefon numarası gerekli!")
-    if not client.is_connected():
-        await client.connect()
+
+    if client.is_connected():
+        await client.disconnect()
+
+    # Sıfır oturumla başla
+    client.session = StringSession()
+    await client.connect()
+
     try:
         res = await client.send_code_request(phone)
-        auth_state["phone"] = phone
-        auth_state["phone_code_hash"] = res.phone_code_hash
+        temp_session = client.session.save()
         add_log(f"📩 Doğrulama kodu gönderildi: {phone}")
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "phone": phone,
+            "phone_code_hash": res.phone_code_hash,
+            "temp_session": temp_session
+        }
     except Exception as e:
         add_log(f"❌ Kod isteme hatası: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/auth/verify")
 async def verify_code(data: dict):
+    phone = data.get("phone", "").strip()
     code = data.get("code", "").strip()
     password = data.get("password", "").strip()
+    phone_code_hash = data.get("phone_code_hash", "").strip()
+    temp_session = data.get("temp_session", "").strip()
+
+    if not phone or not phone_code_hash or not temp_session:
+        raise HTTPException(status_code=400, detail="Oturum anahtarı bulunamadı! Lütfen tekrar 'Kod Gönder'e basın.")
+
     try:
-        await client.sign_in(phone=auth_state["phone"], code=code, phone_code_hash=auth_state["phone_code_hash"])
-    except errors.SessionPasswordNeededError:
-        if not password:
-            return {"status": "2fa_required"}
-        await client.sign_in(password=password)
+        if client.is_connected():
+            await client.disconnect()
+
+        # Kodun istendiği oturumu yeniden yükle
+        client.session = StringSession(temp_session)
+        await client.connect()
+
+        try:
+            await client.sign_in(phone=phone, code=code, phone_code_hash=phone_code_hash)
+        except errors.SessionPasswordNeededError:
+            if not password:
+                return {"status": "2fa_required", "detail": "2FA Şifresi gerekli!"}
+            await client.sign_in(password=password)
+
+        final_token = client.session.save()
+        try:
+            with open(SESSION_FILE, "w", encoding="utf-8") as f:
+                f.write(final_token)
+        except:
+            pass
+
+        add_log("🎉 GİRİŞ BAŞARILI! Telegram oturumu kalıcı olarak bağlandı.")
+        return {
+            "status": "ok",
+            "session_string": final_token
+        }
     except Exception as e:
+        add_log(f"❌ Giriş hatası: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Kalıcı oturum stringini al ve kaydet
-    token = client.session.save()
-    try:
-        with open(SESSION_FILE, "w", encoding="utf-8") as f:
-            f.write(token)
-    except:
-        pass
-
-    add_log("🎉 GİRİŞ BAŞARILI! Oturum kalıcı olarak kaydedildi.")
-    return {"status": "ok", "session_string": token}
-
-# --- WEB PANEL ENDPOINTLERİ ---
+# --- WEB PANEL YOLLARI ---
 @app.get("/")
 async def index():
     if not os.path.exists("index.html"):
-        return HTMLResponse("<h3>index.html dosyası bulunamadı!</h3>", status_code=404)
+        return HTMLResponse("<h3>index.html bulunamadı!</h3>", status_code=404)
     with open("index.html", "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
@@ -250,7 +267,6 @@ async def get_data():
     except:
         pass
 
-    # Sayfa yenilendiğinde görev ölüyse ama config açıksa tekrar ayağa kaldır
     if is_auth and config["is_auto_pilot_on"] and (broadcast_task is None or broadcast_task.done()):
         broadcast_task = asyncio.create_task(hourly_broadcast_task())
 
