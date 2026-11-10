@@ -1,18 +1,21 @@
- import os
+import os
 import asyncio
 import random
-from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events, errors
 import uvicorn
 
+# Vercel'in ilk olarak aradığı satır en başa alındı:
+app = FastAPI()
+
 # --- TELEGRAM API BİLGİLERİ ---
 API_ID = int(os.environ.get("API_ID", 16896485))
 API_HASH = os.environ.get("API_HASH", "29b5bb9351b4cb3738d73abaf5eb28ca")
-SESSION_NAME = os.environ.get("SESSION_NAME", "bot_session")
 
+# Vercel read-only disk koruması (/tmp dizini)
+SESSION_NAME = os.path.join("/tmp", "bot_session") if os.environ.get("VERCEL") else "bot_session"
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 config = {
@@ -33,7 +36,7 @@ def add_log(msg: str):
         config["logs"].pop(0)
     print(entry)
 
-# ids.txt dosyasından hem ID hem de Kullanıcı Adlarını okur
+# ids.txt dosyasından hedefleri oku
 def get_targets():
     targets = []
     try:
@@ -67,13 +70,13 @@ async def hourly_broadcast_task():
                     await client.send_message(user, config["promo_message"])
                     add_log(f"✉️ İletildi: {user}")
                     
-                    # Spam koruması (6-12 saniye bekleme)
+                    # Spam koruması
                     await asyncio.sleep(random.uniform(6, 12))
                 except errors.FloodWaitError as e:
                     add_log(f"🕒 Spam engeli: {e.seconds} saniye bekleniyor...")
                     await asyncio.sleep(e.seconds + 5)
                 except errors.UserDeactivatedBanError:
-                    add_log("❌ Hesap Telegram tarafından sınırlandırıldı!")
+                    add_log("❌ Hesap kısıtlandı!")
                     config["is_auto_pilot_on"] = False
                     break
                 except Exception as e:
@@ -86,7 +89,7 @@ async def hourly_broadcast_task():
     except asyncio.CancelledError:
         add_log("🛑 Broadcast döngüsü durduruldu.")
     except Exception as e:
-        add_log(f"❌ Kritik hata (Broadcast): {e}")
+        add_log(f"❌ Kritik hata: {e}")
 
 # --- TETİKLENME (KARŞI TARAF LİNK ATTIĞINDA) ---
 @client.on(events.NewMessage(incoming=True))
@@ -111,36 +114,36 @@ async def handle_response(event):
             await asyncio.sleep(1)
             await event.respond(f"Done {done_link}")
             
-            add_log(f"✅ Karşılıklı reklam tamamlandı: {event.chat_id} -> {done_link}")
+            add_log(f"✅ Karşılıklı reklam yapıldı: {event.chat_id} -> {done_link}")
         except errors.FloodWaitError as e:
             add_log(f"🕒 FloodWait: {e.seconds} sn")
         except Exception as e:
             add_log(f"❌ Yanıt hatası ({event.chat_id}): {e}")
 
-# --- FASTAPI LIFESPAN ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await client.connect()
-    if await client.is_user_authorized():
-        add_log("🚀 Telethon bağlandı, oturum AKTİF.")
-    else:
-        add_log("⚠️ Oturum açık değil! Session dosyasını kontrol edin.")
-    
-    yield
-    
+# --- VERCEL İÇİN STARTUP & SHUTDOWN ---
+@app.on_event("startup")
+async def startup():
+    try:
+        await client.connect()
+        if await client.is_user_authorized():
+            add_log("🚀 Telethon bağlandı, oturum AKTİF.")
+        else:
+            add_log("⚠️ Oturum açık değil!")
+    except Exception as e:
+        add_log(f"⚠️ Bağlantı hatası: {e}")
+
+@app.on_event("shutdown")
+async def shutdown():
     global broadcast_task
     if broadcast_task and not broadcast_task.done():
         broadcast_task.cancel()
     await client.disconnect()
-    add_log("🔌 Telethon bağlantısı kapatıldı.")
 
-app = FastAPI(lifespan=lifespan)
-
-# --- PANEL YOLLARI ---
+# --- WEB PANEL ENDPOINT'LERİ ---
 @app.get("/")
 async def index():
     if not os.path.exists("index.html"):
-        return HTMLResponse("<h3>index.html dosyası bulunamadı!</h3>", status_code=404)
+        return HTMLResponse("<h3>index.html bulunamadı!</h3>", status_code=404)
     with open("index.html", "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
@@ -180,4 +183,4 @@ async def update(data: dict):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
