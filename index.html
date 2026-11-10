@@ -3,29 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Cross-Ads Autopilot</title>
+    <title>Ads Autopilot Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; padding: 24px; }
-        .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 16px; }
-        h1 { font-size: 20px; font-weight: 700; color: #38bdf8; }
-        .badge { font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 9999px; }
+        body { background: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; padding: 16px; }
+        .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 12px; }
+        h1 { font-size: 18px; font-weight: 700; color: #38bdf8; }
+        .badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px; }
         .badge-active { background: #064e3b; color: #34d399; }
         .badge-inactive { background: #7f1d1d; color: #f87171; }
-        .card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-        .stat-label { font-size: 13px; color: #94a3b8; }
-        .stat-value { font-size: 18px; font-weight: 700; margin-top: 4px; color: #f1f5f9; }
-        .btn { padding: 12px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 15px; }
+        .card { background: #1e293b; border-radius: 12px; padding: 16px; border: 1px solid #334155; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        .stat-label { font-size: 12px; color: #94a3b8; }
+        .stat-value { font-size: 16px; font-weight: 700; margin-top: 4px; color: #f1f5f9; }
+        .btn { padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; }
         .btn-start { background: #10b981; color: #042f2e; }
         .btn-stop { background: #ef4444; color: #450a0a; }
         .btn-blue { background: #0284c7; color: white; }
-        input { background: #0f172a; border: 1px solid #334155; padding: 12px; border-radius: 8px; color: #f8fafc; font-size: 14px; width: 100%; outline: none; }
-        .input-group { display: flex; gap: 10px; margin-top: 10px; }
-        #log-box { background: #020617; border-radius: 8px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 12px; height: 300px; overflow-y: auto; color: #a5f3fc; border: 1px solid #0f172a; display: flex; flex-direction: column; gap: 4px; }
+        input { background: #0f172a; border: 1px solid #334155; padding: 10px; border-radius: 8px; color: #f8fafc; font-size: 14px; width: 100%; outline: none; }
+        .input-group { display: flex; gap: 8px; margin-top: 8px; }
+        #log-box { background: #020617; border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; height: 260px; overflow-y: auto; color: #a5f3fc; border: 1px solid #0f172a; display: flex; flex-direction: column; gap: 4px; }
         .log-entry { word-break: break-all; }
+        #loginCard { border: 1px solid #f59e0b; background: #181c2e; }
     </style>
 </head>
 <body>
@@ -33,15 +34,34 @@
         <header>
             <div>
                 <h1>Ads Autopilot Dashboard</h1>
-                <p style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Kanal: @ratlogscloud | Mesaj: Ads to ads @tgciyim</p>
+                <p style="font-size: 12px; color: #94a3b8;">Kanal: @ratlogscloud</p>
             </div>
-            <span id="authBadge" class="badge badge-inactive">Kontrol Ediliyor...</span>
+            <span id="authBadge" class="badge badge-inactive">Giriş Yapılmamış!</span>
         </header>
+
+        <!-- TELEGRAM GİRİŞ FORMU -->
+        <div class="card" id="loginCard">
+            <h3 style="font-size: 15px; color: #f59e0b; margin-bottom: 8px;">🔑 Telegram Oturumu Aç (Tek Seferlik)</h3>
+            <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Hesabına giriş yapmak için telefon numaranı gir ve kod iste.</p>
+            
+            <div id="stepPhone" class="input-group">
+                <input type="text" id="phoneInput" value="+905315151419" placeholder="+905xxxxxxxxx">
+                <button class="btn btn-blue" onclick="sendCode()">Kod Gönder</button>
+            </div>
+
+            <div id="stepCode" style="display: none; margin-top: 10px;">
+                <div class="input-group">
+                    <input type="text" id="codeInput" placeholder="Telegram'a gelen 5 haneli kod">
+                    <input type="password" id="passInput" placeholder="2FA Şifresi (varsa)">
+                    <button class="btn btn-start" onclick="verifyCode()">Giriş Yap</button>
+                </div>
+            </div>
+        </div>
 
         <div class="grid">
             <div class="card">
                 <div class="stat-label">Hedef Sayısı</div>
-                <div class="stat-value" id="targetCount">Yükleniyor...</div>
+                <div class="stat-value" id="targetCount">45 Kişi</div>
             </div>
             <div class="card">
                 <div class="stat-label">Oto Pilot Durumu</div>
@@ -53,7 +73,7 @@
         </div>
 
         <div class="card">
-            <div class="stat-label">Gönderilen Reklam Metni (Buradan değiştirebilirsiniz):</div>
+            <div class="stat-label">Gönderilen Reklam Metni:</div>
             <div class="input-group">
                 <input type="text" id="promoInput">
                 <button class="btn btn-blue" onclick="updateLink()">Güncelle</button>
@@ -61,27 +81,65 @@
         </div>
 
         <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                 <span class="stat-label">Canlı Terminal Logları</span>
-                <span style="font-size: 12px; color: #64748b;">(2 sn'de bir yenilenir)</span>
+                <span style="font-size: 11px; color: #64748b;">(2 sn'de bir yenilenir)</span>
             </div>
             <div id="log-box"></div>
         </div>
     </div>
 
     <script>
+        async function sendCode() {
+            const phone = document.getElementById('phoneInput').value.trim();
+            const res = await fetch('/auth/send-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert("Telegram uygulamana onay kodu gönderildi!");
+                document.getElementById('stepCode').style.display = 'block';
+            } else {
+                alert("Hata: " + (data.detail || data.message));
+            }
+        }
+
+        async function verifyCode() {
+            const code = document.getElementById('codeInput').value.trim();
+            const password = document.getElementById('passInput').value.trim();
+            const res = await fetch('/auth/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert("Giriş Başarılı! Artık sistemi Başlatabilirsin.");
+                document.getElementById('loginCard').style.display = 'none';
+                fetchData();
+            } else {
+                alert("Hata: " + (data.detail || data.message));
+            }
+        }
+
         async function fetchData() {
             try {
                 const res = await fetch('/get-data');
                 const data = await res.json();
                 
                 const badge = document.getElementById('authBadge');
+                const loginCard = document.getElementById('loginCard');
+
                 if (data.is_auth) {
                     badge.innerText = "Telegram Aktif";
                     badge.className = "badge badge-active";
+                    loginCard.style.display = 'none';
                 } else {
                     badge.innerText = "Giriş Yapılmamış!";
                     badge.className = "badge badge-inactive";
+                    loginCard.style.display = 'block';
                 }
 
                 document.getElementById('targetCount').innerText = data.target_count + " Kişi";
@@ -107,9 +165,7 @@
                 const logBox = document.getElementById('log-box');
                 logBox.innerHTML = data.logs.map(l => `<div class="log-entry">${l}</div>`).join('');
                 logBox.scrollTop = logBox.scrollHeight;
-            } catch (e) {
-                console.error("Veri çekilemedi", e);
-            }
+            } catch (e) {}
         }
 
         async function togglePilot() {
