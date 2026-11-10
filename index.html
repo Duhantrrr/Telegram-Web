@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ads Autopilot Dashboard</title>
+    <title>Telegram Ads Autopilot</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; padding: 16px; }
-        .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+        .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 12px; }
         h1 { font-size: 18px; font-weight: 700; color: #38bdf8; }
         .badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px; }
@@ -18,13 +18,13 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
         .stat-label { font-size: 12px; color: #94a3b8; }
         .stat-value { font-size: 16px; font-weight: 700; margin-top: 4px; color: #f1f5f9; }
-        .btn { padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; }
+        .btn { padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: 0.2s; }
         .btn-start { background: #10b981; color: #042f2e; }
         .btn-stop { background: #ef4444; color: #450a0a; }
         .btn-blue { background: #0284c7; color: white; }
         input { background: #0f172a; border: 1px solid #334155; padding: 10px; border-radius: 8px; color: #f8fafc; font-size: 14px; width: 100%; outline: none; }
         .input-group { display: flex; gap: 8px; margin-top: 8px; }
-        #log-box { background: #020617; border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; height: 260px; overflow-y: auto; color: #a5f3fc; border: 1px solid #0f172a; display: flex; flex-direction: column; gap: 4px; }
+        #log-box { background: #020617; border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; height: 320px; overflow-y: auto; color: #a5f3fc; border: 1px solid #0f172a; display: flex; flex-direction: column; gap: 4px; }
         .log-entry { word-break: break-all; }
         #loginCard { border: 1px solid #f59e0b; background: #181c2e; }
     </style>
@@ -34,24 +34,24 @@
         <header>
             <div>
                 <h1>Ads Autopilot Dashboard</h1>
-                <p style="font-size: 12px; color: #94a3b8;">Kanal: @ratlogscloud</p>
+                <p style="font-size: 12px; color: #94a3b8;">15 sn aralıklı otomatik takas & log</p>
             </div>
-            <span id="authBadge" class="badge badge-inactive">Giriş Yapılmamış!</span>
+            <span id="authBadge" class="badge badge-inactive">Kontrol ediliyor...</span>
         </header>
 
-        <!-- TELEGRAM GİRİŞ FORMU -->
-        <div class="card" id="loginCard">
-            <h3 style="font-size: 15px; color: #f59e0b; margin-bottom: 8px;">🔑 Telegram Oturumu Aç (Tek Seferlik)</h3>
-            <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Hesabına giriş yapmak için telefon numaranı gir ve kod iste.</p>
+        <!-- GİRİŞ FORMU (Giriş yapılmamışsa görünür) -->
+        <div class="card" id="loginCard" style="display: none;">
+            <h3 style="font-size: 14px; color: #f59e0b; margin-bottom: 6px;">🔑 Telegram Oturumu Aç (Tek Seferlik)</h3>
+            <p style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">Numaranı yaz ve kod iste, bir kere giriş yapınca hep açık kalır.</p>
             
             <div id="stepPhone" class="input-group">
-                <input type="text" id="phoneInput" value="+905315151419" placeholder="+905xxxxxxxxx">
+                <input type="text" id="phoneInput" value="+905315151419">
                 <button class="btn btn-blue" onclick="sendCode()">Kod Gönder</button>
             </div>
 
             <div id="stepCode" style="display: none; margin-top: 10px;">
                 <div class="input-group">
-                    <input type="text" id="codeInput" placeholder="Telegram'a gelen 5 haneli kod">
+                    <input type="text" id="codeInput" placeholder="Telegram kodu">
                     <input type="password" id="passInput" placeholder="2FA Şifresi (varsa)">
                     <button class="btn btn-start" onclick="verifyCode()">Giriş Yap</button>
                 </div>
@@ -61,7 +61,7 @@
         <div class="grid">
             <div class="card">
                 <div class="stat-label">Hedef Sayısı</div>
-                <div class="stat-value" id="targetCount">45 Kişi</div>
+                <div class="stat-value" id="targetCount">...</div>
             </div>
             <div class="card">
                 <div class="stat-label">Oto Pilot Durumu</div>
@@ -82,7 +82,7 @@
 
         <div class="card">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="stat-label">Canlı Terminal Logları</span>
+                <span class="stat-label">Canlı Terminal ve Mesaj Logları</span>
                 <span style="font-size: 11px; color: #64748b;">(2 sn'de bir yenilenir)</span>
             </div>
             <div id="log-box"></div>
@@ -97,12 +97,11 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone })
             });
-            const data = await res.json();
             if (res.ok) {
-                alert("Telegram uygulamana onay kodu gönderildi!");
+                alert("Kod Telegram uygulamana gönderildi!");
                 document.getElementById('stepCode').style.display = 'block';
             } else {
-                alert("Hata: " + (data.detail || data.message));
+                alert("Kod gönderme hatası!");
             }
         }
 
@@ -116,11 +115,11 @@
             });
             const data = await res.json();
             if (res.ok) {
-                alert("Giriş Başarılı! Artık sistemi Başlatabilirsin.");
+                alert("Giriş Başarılı! Oturum kaydedildi.");
                 document.getElementById('loginCard').style.display = 'none';
                 fetchData();
             } else {
-                alert("Hata: " + (data.detail || data.message));
+                alert("Hata: " + (data.detail || "Giriş yapılamadı"));
             }
         }
 
@@ -147,7 +146,7 @@
                 const pStatus = document.getElementById('pilotStatus');
                 const btn = document.getElementById('toggleBtn');
                 if (data.is_auto) {
-                    pStatus.innerText = "Çalışıyor (1 Saatlik Döngü)";
+                    pStatus.innerText = "Çalışıyor (15 sn döngü)";
                     pStatus.style.color = "#34d399";
                     btn.innerText = "Durdur";
                     btn.className = "btn btn-stop";
@@ -180,7 +179,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ link })
             });
-            alert("Mesaj güncellendi!");
+            alert("Reklam metni güncellendi!");
             fetchData();
         }
 
