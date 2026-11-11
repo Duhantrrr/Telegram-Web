@@ -7,28 +7,28 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; padding: 16px; }
-        .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 12px; }
-        h1 { font-size: 18px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
-        .badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px; }
+        body { background: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; padding: 14px; }
+        .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 10px; }
+        h1 { font-size: 17px; font-weight: 700; color: #38bdf8; }
+        .badge { font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 9999px; }
         .badge-active { background: #064e3b; color: #34d399; }
         .badge-inactive { background: #7f1d1d; color: #f87171; }
         .badge-ai { background: #4c1d95; color: #c084fc; border: 1px solid #7c3aed; }
-        .card { background: #1e293b; border-radius: 12px; padding: 16px; border: 1px solid #334155; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-        .stat-label { font-size: 12px; color: #94a3b8; }
-        .stat-value { font-size: 16px; font-weight: 700; margin-top: 4px; color: #f1f5f9; }
-        .btn { padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; }
+        .card { background: #1e293b; border-radius: 10px; padding: 14px; border: 1px solid #334155; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        .stat-label { font-size: 11px; color: #94a3b8; }
+        .stat-value { font-size: 15px; font-weight: 700; margin-top: 4px; color: #f1f5f9; }
+        .btn { padding: 9px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; font-size: 13px; }
         .btn-start { background: #10b981; color: #042f2e; }
         .btn-stop { background: #ef4444; color: #450a0a; }
         .btn-blue { background: #0284c7; color: white; }
-        input { background: #0f172a; border: 1px solid #334155; padding: 10px; border-radius: 8px; color: #f8fafc; font-size: 14px; width: 100%; outline: none; }
-        .input-group { display: flex; gap: 8px; margin-top: 8px; }
-        .col-group { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-        #log-box { background: #020617; border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; height: 320px; overflow-y: auto; color: #a5f3fc; border: 1px solid #0f172a; display: flex; flex-direction: column; gap: 4px; }
+        input { background: #0f172a; border: 1px solid #334155; padding: 9px; border-radius: 6px; color: #f8fafc; font-size: 13px; width: 100%; outline: none; }
+        .input-group { display: flex; gap: 6px; margin-top: 6px; }
+        .col-group { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+        #log-box { background: #020617; border-radius: 6px; padding: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; height: 300px; overflow-y: auto; color: #a5f3fc; border: 1px solid #0f172a; display: flex; flex-direction: column; gap: 4px; }
         .log-entry { word-break: break-all; }
-        .countdown { color: #38bdf8; font-weight: 600; font-size: 13px; margin-top: 4px; }
+        .countdown { color: #38bdf8; font-weight: 600; font-size: 12px; margin-top: 4px; }
         .ai-card { background: #1e1b4b; border: 1px solid #4338ca; }
     </style>
 </head>
@@ -36,23 +36,22 @@
     <div class="container">
         <header>
             <div>
-                <h1>🤖 AI Ads Autopilot</h1>
-                <p style="font-size: 12px; color: #94a3b8;">Yapay Zeka Destekli Otomatik Hata Müdahalesi</p>
+                <h1>🤖 Real AI Ads Autopilot</h1>
+                <p style="font-size: 11px; color: #94a3b8;">Gemini Destekli İngilizce İkna & Hata Komutanı</p>
             </div>
             <div style="display: flex; gap: 6px;">
-                <span class="badge badge-ai">🤖 AI Aktif</span>
+                <span class="badge badge-ai" id="aiStatus">🤖 AI Hazır</span>
                 <span id="authBadge" class="badge badge-inactive">Giriş Yok</span>
             </div>
         </header>
 
         <!-- TELEGRAM GİRİŞ FORMU -->
         <div class="card" id="loginCard">
-            <h3 style="font-size: 14px; color: #f59e0b; margin-bottom: 6px;">🔑 Telegram Oturumu Aç (Kalıcı)</h3>
+            <h3 style="font-size: 13px; color: #f59e0b; margin-bottom: 4px;">🔑 Telegram Girişi (Kalıcı)</h3>
             <div id="stepPhone" class="input-group">
                 <input type="text" id="phoneInput" value="+905315151419">
                 <button class="btn btn-blue" onclick="sendCode()">Kod Gönder</button>
             </div>
-
             <div id="stepCode" style="display: none;">
                 <div class="col-group">
                     <input type="text" id="codeInput" placeholder="Telegram kodu">
@@ -65,7 +64,7 @@
         <!-- İSTATİSTİKLER -->
         <div class="grid">
             <div class="card">
-                <div class="stat-label">Hedef Kullanıcı</div>
+                <div class="stat-label">Hedefler</div>
                 <div class="stat-value" id="targetCount">...</div>
             </div>
             <div class="card ai-card">
@@ -73,7 +72,7 @@
                 <div class="stat-value" id="aiBlacklist" style="color: #c084fc;">0 Kişi</div>
             </div>
             <div class="card">
-                <div class="stat-label">Oto Pilot Durumu</div>
+                <div class="stat-label">Durum</div>
                 <div class="stat-value" id="pilotStatus">Durduruldu</div>
                 <div class="countdown" id="timerDisplay"></div>
             </div>
@@ -82,25 +81,25 @@
             </div>
         </div>
 
-        <!-- AYARLAR -->
+        <!-- GEMINI API VE REKLAM METNİ -->
         <div class="card">
-            <div class="stat-label">Reklam Metni:</div>
-            <div class="input-group">
-                <input type="text" id="promoInput">
-                <button class="btn btn-blue" onclick="updateSettings()">Güncelle</button>
-            </div>
-            <div class="stat-label" style="margin-top: 10px;">Gemini API Anahtarı (Opsiyonel - Daha akıllı sohbet yanıtları için):</div>
+            <div class="stat-label">Google Gemini API Key (Gerçek AI Kararları ve İngilizce Sohbet İçin):</div>
             <div class="input-group">
                 <input type="password" id="geminiInput" placeholder="AIzaSy...">
-                <button class="btn btn-blue" onclick="updateSettings()">Kaydet</button>
+                <button class="btn btn-blue" onclick="saveGeminiKey()">Kaydet</button>
+            </div>
+            <div class="stat-label" style="margin-top: 8px;">Gönderilen Reklam Metni:</div>
+            <div class="input-group">
+                <input type="text" id="promoInput">
+                <button class="btn btn-blue" onclick="updatePromo()">Güncelle</button>
             </div>
         </div>
 
         <!-- CANLI LOGLAR -->
         <div class="card">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span class="stat-label">Canlı Terminal & AI Müdahale Logları</span>
-                <span style="font-size: 11px; color: #64748b;">(Otomatik Yenilenir)</span>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <span class="stat-label">Canlı Terminal & Gerçek AI Müdahale Logları</span>
+                <span style="font-size: 11px; color: #64748b;">(2 sn)</span>
             </div>
             <div id="log-box"></div>
         </div>
@@ -111,15 +110,21 @@
         let currentIndex = 0;
         let countdownTimer = null;
 
-        function getSavedSession() {
-            return localStorage.getItem('tg_session_string') || '';
+        function getSession() { return localStorage.getItem('tg_session_string') || ''; }
+        function getGeminiKey() { return localStorage.getItem('gemini_api_key') || ''; }
+
+        function saveGeminiKey() {
+            const k = document.getElementById('geminiInput').value.trim();
+            if (k) {
+                localStorage.setItem('gemini_api_key', k);
+                alert("Gemini API Anahtarı tarayıcıya kaydedildi! AI tam kapasite aktif.");
+            }
         }
 
         function checkAuthUI() {
-            const sess = getSavedSession();
+            const sess = getSession();
             const badge = document.getElementById('authBadge');
             const loginCard = document.getElementById('loginCard');
-
             if (sess) {
                 badge.innerText = "Telegram Aktif";
                 badge.className = "badge badge-active";
@@ -129,6 +134,9 @@
                 badge.className = "badge badge-inactive";
                 loginCard.style.display = 'block';
             }
+
+            const k = getGeminiKey();
+            if (k) document.getElementById('geminiInput').value = k;
         }
 
         async function sendCode() {
@@ -168,7 +176,7 @@
             const data = await res.json();
             if (res.ok && data.session_string) {
                 localStorage.setItem('tg_session_string', data.session_string);
-                alert("Tebrikler! Oturum kalıcı olarak açıldı.");
+                alert("Giriş başarılı! Oturum kaydedildi.");
                 checkAuthUI();
             } else {
                 alert("Hata: " + (data.detail || "Giriş yapılamadı!"));
@@ -178,14 +186,14 @@
         async function runNextStep() {
             if (!isRunning) return;
 
-            const sess = getSavedSession();
+            const sess = getSession();
             if (!sess) {
                 alert("Önce giriş yapın!");
                 togglePilot();
                 return;
             }
 
-            document.getElementById('timerDisplay').innerText = "AI Kontrol Ediyor...";
+            document.getElementById('timerDisplay').innerText = "AI devrede...";
 
             try {
                 const res = await fetch('/api/send-step', {
@@ -193,6 +201,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         session_string: sess,
+                        gemini_key: getGeminiKey(),
                         index: currentIndex
                     })
                 });
@@ -200,7 +209,7 @@
                 const data = await res.json();
 
                 if (data.status === "unauthorized") {
-                    alert("Oturum süresi doldu!");
+                    alert("Oturum düştü!");
                     localStorage.removeItem('tg_session_string');
                     checkAuthUI();
                     togglePilot();
@@ -208,21 +217,21 @@
                 }
 
                 if (data.status === "flood") {
-                    startCountdown(data.wait, runNextStep, "AI Koruma Uykusu");
+                    startCountdown(data.wait, runNextStep, "AI Acil Durum Uykusu");
                     return;
                 }
 
                 currentIndex = data.next_index;
 
                 if (data.round_finished) {
-                    startCountdown(3600, runNextStep, "1 Tur Bitti (1 Saat Uyku)");
+                    startCountdown(3600, runNextStep, "1 Tur Bitti (1 Saat Bekleme)");
                 } else {
                     const waitTime = data.delay || 15;
-                    startCountdown(waitTime, runNextStep, "Sonraki Hedef");
+                    startCountdown(waitTime, runNextStep, "Sonraki Mesaj");
                 }
 
             } catch (e) {
-                startCountdown(10, runNextStep, "AI Kurtarma Beklemesi");
+                startCountdown(10, runNextStep, "AI Yeniden Bağlanıyor");
             }
         }
 
@@ -283,7 +292,8 @@
                 const logBox = document.getElementById('log-box');
                 logBox.innerHTML = data.logs.map(l => {
                     let color = "#a5f3fc";
-                    if (l.includes("[AI MÜDAHALE]") || l.includes("[AI ACİL FREN]")) color = "#f472b6";
+                    if (l.includes("[AI MÜDAHALE]") || l.includes("⚠️")) color = "#f472b6";
+                    if (l.includes("[AI İNGİLİZCE YANIT]")) color = "#c084fc";
                     if (l.includes("✅")) color = "#4ade80";
                     return `<div class="log-entry" style="color: ${color};">${l}</div>`;
                 }).join('');
@@ -291,15 +301,14 @@
             } catch (e) {}
         }
 
-        async function updateSettings() {
+        async function updatePromo() {
             const link = document.getElementById('promoInput').value;
-            const geminiKey = document.getElementById('geminiInput').value;
             await fetch('/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ link, gemini_key: geminiKey })
+                body: JSON.stringify({ link })
             });
-            alert("Ayarlar güncellendi!");
+            alert("Reklam metni güncellendi!");
         }
 
         checkAuthUI();
