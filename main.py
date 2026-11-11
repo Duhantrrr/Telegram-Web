@@ -1,15 +1,15 @@
 import os
 import json
 import asyncio
+import urllib.request
+import urllib.error
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events, errors
 from telethon.sessions import StringSession
-import httpx
 import uvicorn
 
-# Vercel'in ilk okuduğu nesne
 app = FastAPI()
 
 API_ID = int(os.environ.get("API_ID", 16896485))
@@ -31,7 +31,6 @@ def add_log(msg: str):
         config["logs"].pop(0)
     print(entry)
 
-# Güvenli Hedef Listesi Okuma (Dosya yoksa bile çökmez)
 DEFAULT_USERS = [
     "ThinkCaptain01", "BayGeneral", "AdsbyAdsmy", "xDarkLogx3", "GTX_E",
     "notdelo", "DK_CE", "ansuport", "griftking", "BASEDCLOUD",
@@ -57,35 +56,39 @@ def get_targets():
         pass
     return targets if targets else DEFAULT_USERS
 
-# --- GERÇEK GEMINI YAPAY ZEKA MOTORU ---
+# --- GERÇEK GEMINI YAPAY ZEKA MOTORU (URLLIB İLE GÜVENLİ BAĞLANTI) ---
 class RealGeminiAI:
     def __init__(self):
         self.blacklist = set()
 
-    async def call_gemini(self, prompt: str, api_key: str) -> str:
+    def _request_gemini_sync(self, prompt: str, api_key: str) -> str:
         key = api_key or config["gemini_api_key"]
         if not key:
             return ""
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
-        payload = {
+        payload = json.dumps({
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.4}
-        }
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
         try:
-            async with httpx.AsyncClient(timeout=7.0) as client:
-                res = await client.post(url, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
+            with urllib.request.urlopen(req, timeout=7) as res:
+                if res.status == 200:
+                    data = json.loads(res.read().decode("utf-8"))
                     return data["candidates"][0]["content"]["parts"][0]["text"].strip()
         except:
             pass
         return ""
 
+    async def call_gemini(self, prompt: str, api_key: str) -> str:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._request_gemini_sync, prompt, api_key)
+
     async def decide_on_error(self, user: str, error_msg: str, api_key: str) -> dict:
         prompt = (
             f"You are the incident commander for a Telegram bot. An error happened while messaging @{user}: '{error_msg}'.\n"
             f"Respond ONLY with a JSON:\n"
-            f'{{"action": "skip" or "sleep", "wait_seconds": 15, "blacklist": true or false, "reason": "Explanation in Turkish"}}'
+            f'{{"action": "skip" or "sleep", "wait_seconds": 15, "blacklist": true or false, "reason": "Short explanation in Turkish"}}'
         )
         raw = await self.call_gemini(prompt, api_key)
         try:
@@ -145,7 +148,7 @@ async def inspect_and_reply(client: TelegramClient, api_key: str):
                 await client.send_read_acknowledge(dialog.id)
 
             elif len(lower) > 1:
-                add_log(f"📩 {name} yazdı: \"{text}\" -> AI yanıtlıyor...")
+                add_log(f"📩 {name} yazdı: \"{text}\" -> AI inceliyor...")
                 ai_answer = await gemini_ai.reply_to_english_user(text, name, api_key)
                 await msg.reply(ai_answer)
                 add_log(f"🤖 [AI İNGİLİZCE YANIT] {name}: \"{ai_answer}\"")
@@ -258,7 +261,7 @@ async def update(data: dict):
         config["promo_message"] = data.get("link").strip()
     return {"status": "ok"}
 
-# HTML DOSYA BULUNAMADI HATASINI ÖNLEYEN GÖMÜLÜ ARAYÜZ
+# ÇÖKME İHTİMALİNİ BİTİREN GÖMÜLÜ ARAYÜZ
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
 <head>
