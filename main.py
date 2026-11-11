@@ -8,60 +8,20 @@ from fastapi.responses import HTMLResponse
 from telethon import TelegramClient, events, errors
 from telethon.sessions import StringSession
 import uvicorn
+import urllib.request
 
 app = FastAPI()
 
-# --- DOSYA VE DİZİN YOLLARI ---
-IS_VERCEL = bool(os.environ.get("VERCEL"))
-BASE_DIR = "/tmp" if IS_VERCEL else "."
-SESSION_FILE = os.path.join(BASE_DIR, "session_token.txt")
-STATE_FILE = os.path.join(BASE_DIR, "bot_state.json")
-
 API_ID = int(os.environ.get("API_ID", 16896485))
 API_HASH = os.environ.get("API_HASH", "29b5bb9351b4cb3738d73abaf5eb28ca")
-
-def get_saved_session():
-    env_sess = os.environ.get("SESSION_STRING", "").strip()
-    if env_sess:
-        return env_sess
-    if os.path.exists(SESSION_FILE):
-        try:
-            with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                return f.read().strip()
-        except:
-            pass
-    return ""
-
-client = TelegramClient(StringSession(get_saved_session()), API_ID, API_HASH)
 
 config = {
     "channel_link": "https://t.me/+vbR5re1Xa-VkOWE0",
     "storage_channel": "@ratlogscloud",
     "promo_message": "Ads to ads @tgciyim https://t.me/+vbR5re1Xa-VkOWE0",
-    "is_auto_pilot_on": False,
+    "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
     "logs": []
 }
-
-broadcast_task: asyncio.Task | None = None
-
-def save_state():
-    try:
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"is_auto": config["is_auto_pilot_on"], "promo": config["promo_message"]}, f)
-    except:
-        pass
-
-def load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                config["is_auto_pilot_on"] = data.get("is_auto", False)
-                config["promo_message"] = data.get("promo", config["promo_message"])
-        except:
-            pass
-
-load_state()
 
 def add_log(msg: str):
     time_str = datetime.now().strftime("%H:%M:%S")
@@ -71,6 +31,80 @@ def add_log(msg: str):
         config["logs"].pop(0)
     print(entry)
 
+# --- YAPAY ZEKA MÜDAHALE MOTORU (AI SELF-HEALING) ---
+class AIAgent:
+    def __init__(self):
+        self.blacklist = set() # Sorunlu/DM kapalı kullanıcıları kara listeye alır
+        self.safe_delay = 15   # AI dinamik hız kontrolü
+
+    def handle_error(self, user: str, exc: Exception) -> dict:
+        """Hata olduğunda yapay zeka müdahale eder ve kararlar alır."""
+        exc_str = str(exc)
+        
+        # 1. DM Gizlilik Engeli
+        if isinstance(exc, errors.UserPrivacyRestrictedError):
+            self.blacklist.add(str(user).lower())
+            add_log(f"🤖 [AI MÜDAHALE]: @{user} DM'lerini gizlemiş. AI bu hesabı kara listeye aldı, bir daha mesaj atılmayacak.")
+            return {"action": "skip", "wait": 1}
+
+        # 2. Kullanıcı Adı Geçersiz / Silinmiş
+        elif isinstance(exc, (errors.UsernameNotOccupiedError, errors.UsernameInvalidError)):
+            self.blacklist.add(str(user).lower())
+            add_log(f"🤖 [AI MÜDAHALE]: @{user} hesabı silinmiş veya geçersiz. AI hedefi eledi.")
+            return {"action": "skip", "wait": 1}
+
+        # 3. Spam Tehlikesi (PeerFlood)
+        elif isinstance(exc, errors.PeerFloodError):
+            self.safe_delay = max(self.safe_delay + 5, 25)
+            add_log(f"🚨 [AI ACİL FREN]: Telegram spam filtresi uyarısı verdi! AI hesabı korumak için hızı düşürdü ve 10 dk uykuya aldı.")
+            return {"action": "sleep", "wait": 600}
+
+        # 4. Telegram FloodWait
+        elif isinstance(exc, errors.FloodWaitError):
+            wait_time = exc.seconds + 5
+            add_log(f"🤖 [AI MÜDAHALE]: Telegram {exc.seconds} sn bekleme istedi. AI güvenli uyku modunu aktif etti ({wait_time} sn).")
+            return {"action": "sleep", "wait": wait_time}
+
+        # 5. Diğer Beklenmeyen Hatalar
+        else:
+            add_log(f"🤖 [AI TEŞHİS]: @{user} için beklenmeyen hata: {exc_str}. AI bu adımı atlayıp sistemi koruyor.")
+            return {"action": "skip", "wait": 5}
+
+    def generate_reply_fallback(self, text: str) -> str:
+        """Karşı taraf soru sorarsa AI'nın ikna edici hazır yanıtı"""
+        lower = text.lower()
+        if any(w in lower for w in ["kimsin", "bot musun", "bot musunuz"]):
+            return "Kanal yöneticisiyim dostum, @ratlogscloud ve ana kanalım için karşılıklı reklam (Ads to ads) yapıyorum. Linkini atarsan hemen paylaşayım."
+        elif any(w in lower for w in ["kaç k", "kac k", "abone", "uye", "üye", "istatistik"]):
+            return f"Aktif kitlemiz var dostum, linkini gönder hemen @ratlogscloud kanalıma atıp Done linkini vereyim, sen de bizimkini paylaş: {config['channel_link']}"
+        else:
+            return f"Karşılıklı reklam yapıyoruz dostum. Sen linkini gönder, ben hemen kanalıma iletip kanıtını atayım. Bizim reklam: {config['promo_message']}"
+
+    async def get_ai_response(self, incoming_text: str) -> str:
+        """Gemini API anahtarı varsa gerçek LLM ile yanıt üretir, yoksa Fallback AI devreye girer"""
+        if not config["gemini_api_key"]:
+            return self.generate_reply_fallback(incoming_text)
+
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={config['gemini_api_key']}"
+            prompt = (
+                f"Sen bir Telegram kanal yöneticisisin. Karşıdaki kullanıcı Telegram'da sana şu mesajı yazdı: '{incoming_text}'. "
+                f"Amacın onunla karşılıklı reklam (Ads to ads) yapmak. Kendi reklam linkin: '{config['channel_link']}'. "
+                f"Ona çok kısa, samimi, Türkçe ve net bir şekilde reklam linkini atmasını ve karşılıklı paylaşacağımızı söyle. 1-2 cümleyi geçme."
+            )
+            payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+            
+            loop = asyncio.get_event_loop()
+            res = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=5))
+            data = json.loads(res.read().decode("utf-8"))
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except Exception as e:
+            add_log(f"⚠️ Gemini API hatası: {e}, yerel AI devreye girdi.")
+            return self.generate_reply_fallback(incoming_text)
+
+ai_engine = AIAgent()
+
 def get_targets():
     targets = []
     try:
@@ -78,124 +112,118 @@ def get_targets():
             with open("ids.txt", "r", encoding="utf-8") as f:
                 for line in f:
                     val = line.strip().replace("https://t.me/", "").replace("@", "")
-                    if val:
+                    if val and val.lower() not in ai_engine.blacklist:
                         targets.append(int(val) if val.isdigit() else val)
     except Exception as e:
         add_log(f"❌ ids.txt hatası: {e}")
     return targets
 
-# --- 15 SANİYE ARAYLA BROADCAST ---
-async def hourly_broadcast_task():
+def get_client(session_str: str) -> TelegramClient:
+    if not session_str:
+        raise HTTPException(status_code=401, detail="Oturum anahtarı yok!")
+    return TelegramClient(StringSession(session_str), API_ID, API_HASH)
+
+# --- GELEN MESAJLARI YAPAY ZEKA İLE YANITLAMA ---
+async def process_incoming_replies(client: TelegramClient):
     try:
-        while config["is_auto_pilot_on"]:
-            targets = get_targets()
-            if not targets:
-                add_log("⚠️ Liste boş! ids.txt kontrol edin.")
-                await asyncio.sleep(300)
+        async for dialog in client.iter_dialogs(limit=15):
+            if not dialog.is_user or dialog.entity.bot:
+                continue
+            
+            msgs = await client.get_messages(dialog.id, limit=1)
+            if not msgs or msgs[0].out:
                 continue
 
-            add_log(f"📢 Operasyon Başladı: {len(targets)} kullanıcı taranıyor (15 sn arayla).")
-            for index, user in enumerate(targets, 1):
-                if not config["is_auto_pilot_on"]:
-                    break
-                try:
-                    await client.send_message(user, config["promo_message"])
-                    add_log(f"✉️ ({index}/{len(targets)}) Gönderildi: @{user}")
-                    
-                    add_log("⏳ 15 saniye bekleniyor...")
-                    await asyncio.sleep(15)
+            msg = msgs[0]
+            text = (msg.raw_text or "").strip()
+            lower_text = text.lower()
 
-                except errors.FloodWaitError as e:
-                    add_log(f"🕒 Telegram FloodWait: {e.seconds} sn bekleniyor...")
-                    await asyncio.sleep(e.seconds + 5)
-                except errors.UserDeactivatedBanError:
-                    add_log("❌ HESAP SINIRLANDIRILDI! Sistem durduruldu.")
-                    config["is_auto_pilot_on"] = False
-                    save_state()
-                    break
-                except Exception as e:
-                    add_log(f"⚠️ Hata (@{user}): {e}")
-                    await asyncio.sleep(15)
-                    continue
+            # 1. Reklam Linki Geldiyse -> Kanala at, Done ver
+            if "t.me/" in lower_text or "telegram.me/" in lower_text:
+                fwd = await client.forward_messages(config["storage_channel"], msg)
+                chan_name = config["storage_channel"].replace("@", "").strip()
+                done_link = f"https://t.me/{chan_name}/{fwd.id}"
+                
+                await msg.reply(config["promo_message"])
+                await asyncio.sleep(0.5)
+                await client.send_message(dialog.id, "Go")
+                await asyncio.sleep(0.5)
+                await client.send_message(dialog.id, f"Done {done_link}")
+                add_log(f"✅ Karşılıklı Reklam Yapıldı: {dialog.name} -> {done_link}")
+                await client.send_read_acknowledge(dialog.id)
 
-            if config["is_auto_pilot_on"]:
-                add_log("💤 45 kişilik liste bitti. 1 saat (3600 sn) uyku modu başladı.")
-                await asyncio.sleep(3600)
-    except asyncio.CancelledError:
-        add_log("🛑 Broadcast işlemi durduruldu.")
+            # 2. Karşı taraf soru veya yazı yazdıysa -> AI Cevaplasın
+            elif len(lower_text) > 1:
+                smart_reply = await ai_engine.get_ai_response(text)
+                await msg.reply(smart_reply)
+                add_log(f"🤖 [AI AKILLI YANIT] {dialog.name} mesajına yanıt verdi: \"{smart_reply}\"")
+                await client.send_read_acknowledge(dialog.id)
+
     except Exception as e:
-        add_log(f"❌ Kritik Broadcast Hatası: {e}")
+        print(f"Gelen mesaj kontrol hatası: {e}")
 
-# --- TETİKLENME (LİNK VEYA ONAY KELİMELERİ) ---
-@client.on(events.NewMessage(incoming=True))
-async def handle_response(event):
-    if not event.is_private:
-        return
-    
-    text = (event.raw_text or "").strip()
-    lower_text = text.lower()
-    user_id = event.chat_id
+# --- TEK TEK MESAJ GÖNDERME (AI KONTROLLÜ) ---
+@app.post("/api/send-step")
+async def send_step(data: dict):
+    session_str = data.get("session_string", "").strip()
+    target_index = data.get("index", 0)
+    targets = get_targets()
 
-    add_log(f"📩 Gelen Mesaj ({user_id}): \"{text}\"")
+    if not targets:
+        return {"status": "error", "message": "Hedef listesi boş veya tümü AI tarafından elendi!"}
 
-    # 1. Link attıysa
-    if "t.me/" in lower_text or "telegram.me/" in lower_text:
-        try:
-            fwd = await client.forward_messages(config["storage_channel"], event.message)
-            chan_name = config["storage_channel"].replace("@", "").strip()
-            done_link = f"https://t.me/{chan_name}/{fwd.id}"
-            
-            await event.reply(config["promo_message"])
-            await asyncio.sleep(1)
-            await event.respond("Go")
-            await asyncio.sleep(1)
-            await event.respond(f"Done {done_link}")
-            add_log(f"✅ Reklam Takası Yapıldı! Kanıt: {done_link}")
-        except Exception as e:
-            add_log(f"❌ Link yanıtlama hatası ({user_id}): {e}")
-        return
+    if target_index >= len(targets):
+        target_index = 0
 
-    # 2. Onay kelimeleri yazdıysa (ok, ready, yes, yeah, go vb.)
-    trigger_words = r'\b(ok|ready|yes|yeah|go|tamam|olur|send|link|yolla|at|anlastik|anlaştık)\b'
-    if re.search(trigger_words, lower_text):
-        try:
-            await event.reply(config["promo_message"])
-            add_log(f"💬 Onay kelimesi yakalandı (\"{text}\") -> Reklam yollandı.")
-        except Exception as e:
-            add_log(f"❌ Kelime yanıt hatası ({user_id}): {e}")
+    target_user = targets[target_index]
+    client = get_client(session_str)
 
-@app.on_event("startup")
-async def startup():
-    global broadcast_task
+    await client.connect()
+    if not await client.is_user_authorized():
+        await client.disconnect()
+        return {"status": "unauthorized", "message": "Oturum düşmüş."}
+
+    # Gelen kutusunu AI ile tara
+    await process_incoming_replies(client)
+
     try:
-        await client.connect()
-        if await client.is_user_authorized():
-            add_log("🚀 Telegram oturumu AKTİF!")
-            if config["is_auto_pilot_on"] and (broadcast_task is None or broadcast_task.done()):
-                broadcast_task = asyncio.create_task(hourly_broadcast_task())
-        else:
-            add_log("⚠️ Oturum açık değil. Lütfen panelden giriş yapın.")
-    except Exception as e:
-        add_log(f"⚠️ Bağlantı hatası: {e}")
+        # En fazla 8 saniye bekle
+        await asyncio.wait_for(
+            client.send_message(target_user, config["promo_message"]),
+            timeout=8.0
+        )
+        add_log(f"✉️ ({target_index + 1}/{len(targets)}) Gönderildi: @{target_user}")
+        next_idx = (target_index + 1) % len(targets)
+        return {
+            "status": "ok",
+            "next_index": next_idx,
+            "round_finished": (next_idx == 0),
+            "delay": ai_engine.safe_delay
+        }
 
-# --- VERCEL İÇİN GÜVENLİ GİRİŞ SİSTEMİ ---
+    except Exception as e:
+        # HATA OLDUĞUNDA YAPAY ZEKA DEVREYE GİRER
+        decision = ai_engine.handle_error(target_user, e)
+        next_idx = (target_index + 1) % len(targets)
+
+        if decision["action"] == "sleep":
+            return {"status": "flood", "wait": decision["wait"], "next_index": target_index}
+        else:
+            return {"status": "ok", "next_index": next_idx, "round_finished": (next_idx == 0), "delay": decision["wait"]}
+
+    finally:
+        await client.disconnect()
+
+# --- GİRİŞ & LOG YOLLARI ---
 @app.post("/auth/send-code")
 async def send_code(data: dict):
     phone = data.get("phone", "").strip()
-    if not phone:
-        raise HTTPException(status_code=400, detail="Telefon numarası gerekli!")
-
-    if client.is_connected():
-        await client.disconnect()
-
-    # Sıfır oturumla başla
-    client.session = StringSession()
+    client = TelegramClient(StringSession(), API_ID, API_HASH)
     await client.connect()
-
     try:
         res = await client.send_code_request(phone)
         temp_session = client.session.save()
-        add_log(f"📩 Doğrulama kodu gönderildi: {phone}")
+        add_log(f"📩 Doğrulama kodu istendi: {phone}")
         return {
             "status": "ok",
             "phone": phone,
@@ -203,8 +231,10 @@ async def send_code(data: dict):
             "temp_session": temp_session
         }
     except Exception as e:
-        add_log(f"❌ Kod isteme hatası: {e}")
+        add_log(f"❌ Kod hatası: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        await client.disconnect()
 
 @app.post("/auth/verify")
 async def verify_code(data: dict):
@@ -214,17 +244,9 @@ async def verify_code(data: dict):
     phone_code_hash = data.get("phone_code_hash", "").strip()
     temp_session = data.get("temp_session", "").strip()
 
-    if not phone or not phone_code_hash or not temp_session:
-        raise HTTPException(status_code=400, detail="Oturum anahtarı bulunamadı! Lütfen tekrar 'Kod Gönder'e basın.")
-
+    client = TelegramClient(StringSession(temp_session), API_ID, API_HASH)
+    await client.connect()
     try:
-        if client.is_connected():
-            await client.disconnect()
-
-        # Kodun istendiği oturumu yeniden yükle
-        client.session = StringSession(temp_session)
-        await client.connect()
-
         try:
             await client.sign_in(phone=phone, code=code, phone_code_hash=phone_code_hash)
         except errors.SessionPasswordNeededError:
@@ -233,22 +255,14 @@ async def verify_code(data: dict):
             await client.sign_in(password=password)
 
         final_token = client.session.save()
-        try:
-            with open(SESSION_FILE, "w", encoding="utf-8") as f:
-                f.write(final_token)
-        except:
-            pass
-
-        add_log("🎉 GİRİŞ BAŞARILI! Telegram oturumu kalıcı olarak bağlandı.")
-        return {
-            "status": "ok",
-            "session_string": final_token
-        }
+        add_log("🎉 GİRİŞ BAŞARILI! Oturum kaydedildi.")
+        return {"status": "ok", "session_string": final_token}
     except Exception as e:
         add_log(f"❌ Giriş hatası: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        await client.disconnect()
 
-# --- WEB PANEL YOLLARI ---
 @app.get("/")
 async def index():
     if not os.path.exists("index.html"):
@@ -256,52 +270,23 @@ async def index():
     with open("index.html", "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
-@app.get("/get-data")
-async def get_data():
-    global broadcast_task
-    is_auth = False
-    try:
-        if not client.is_connected():
-            await client.connect()
-        is_auth = await client.is_user_authorized()
-    except:
-        pass
-
-    if is_auth and config["is_auto_pilot_on"] and (broadcast_task is None or broadcast_task.done()):
-        broadcast_task = asyncio.create_task(hourly_broadcast_task())
-
+@app.get("/get-logs")
+async def get_logs():
     return {
         "logs": config["logs"],
-        "is_auto": config["is_auto_pilot_on"],
-        "is_auth": is_auth,
         "promo_link": config["promo_message"],
-        "target_count": len(get_targets())
+        "target_count": len(get_targets()),
+        "blacklisted_count": len(ai_engine.blacklist),
+        "ai_delay": ai_engine.safe_delay
     }
-
-@app.post("/toggle")
-async def toggle():
-    global broadcast_task
-    config["is_auto_pilot_on"] = not config["is_auto_pilot_on"]
-    save_state()
-
-    if config["is_auto_pilot_on"]:
-        if broadcast_task is None or broadcast_task.done():
-            broadcast_task = asyncio.create_task(hourly_broadcast_task())
-            add_log("▶️ Otomatik Pilot BAŞLATILDI (15 sn döngüsü aktif).")
-    else:
-        if broadcast_task and not broadcast_task.done():
-            broadcast_task.cancel()
-            broadcast_task = None
-        add_log("⏸️ Otomatik Pilot DURDURULDU.")
-        
-    return {"status": "ok", "is_auto": config["is_auto_pilot_on"]}
 
 @app.post("/update")
 async def update(data: dict):
     if "link" in data and data["link"].strip():
         config["promo_message"] = data.get("link").strip()
-        save_state()
-        add_log(f"🔗 Mesaj güncellendi: {config['promo_message']}")
+    if "gemini_key" in data:
+        config["gemini_api_key"] = data.get("gemini_key").strip()
+        add_log("🤖 Gemini API Anahtarı güncellendi.")
     return {"status": "ok"}
 
 if __name__ == "__main__":
