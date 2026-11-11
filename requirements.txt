@@ -1,4 +1,4 @@
-fastapi
-uvicorn
-telethon
-httpx
+fastapi==0.110.0
+uvicorn==0.28.0
+telethon==1.34.0
+httpx==0.27.0
