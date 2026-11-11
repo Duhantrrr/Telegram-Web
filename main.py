@@ -10,10 +10,12 @@ from telethon import TelegramClient, events, errors
 from telethon.sessions import StringSession
 import uvicorn
 
-app = FastAPI()
+app = FastAPI(title="Telegram AI Autopilot")
 
 API_ID = int(os.environ.get("API_ID", 16896485))
 API_HASH = os.environ.get("API_HASH", "29b5bb9351b4cb3738d73abaf5eb28ca")
+AUTH_CACHE_FILE = "/tmp/auth_cache.json"
+CRON_INDEX_FILE = "/tmp/cron_index.txt"
 
 config = {
     "channel_link": "https://t.me/+vbR5re1Xa-VkOWE0",
@@ -43,20 +45,35 @@ DEFAULT_USERS = [
     "ZeroSheII", "WAS_LOST", "Vonez438", "Zero_Trace9", "AccessVortex"
 ]
 
+dynamic_targets = list(DEFAULT_USERS)
+
 def get_targets():
-    targets = []
+    global dynamic_targets
     try:
         if os.path.exists("ids.txt"):
             with open("ids.txt", "r", encoding="utf-8") as f:
                 for line in f:
                     val = line.strip().replace("https://t.me/", "").replace("@", "")
-                    if val:
-                        targets.append(int(val) if val.isdigit() else val)
+                    if val and val not in dynamic_targets:
+                        dynamic_targets.append(int(val) if val.isdigit() else val)
     except:
         pass
-    return targets if targets else DEFAULT_USERS
+    return dynamic_targets
 
-# --- GERÇEK GEMINI YAPAY ZEKA MOTORU (URLLIB İLE GÜVENLİ BAĞLANTI) ---
+def add_new_trader(username_or_id):
+    """Yeni takas yapan kişiyi anında listeye ekler"""
+    global dynamic_targets
+    clean = str(username_or_id).replace("@", "").strip()
+    if clean and clean not in dynamic_targets:
+        dynamic_targets.append(clean)
+        try:
+            with open("ids.txt", "a", encoding="utf-8") as f:
+                f.write(f"\n{clean}")
+        except:
+            pass
+        add_log(f"🆕 [YENİ HEDEF EKLENDİ]: @{clean} Ads to Ads yaptığı için gelecekteki turlara eklendi!")
+
+# --- GERÇEK GEMINI YAPAY ZEKA MOTORU ---
 class RealGeminiAI:
     def __init__(self):
         self.blacklist = set()
@@ -106,7 +123,7 @@ class RealGeminiAI:
 
     async def reply_to_english_user(self, text: str, user_name: str, api_key: str) -> str:
         prompt = (
-            f"You are @tgciyim, managing channel {config['channel_link']}. You are doing 'Ads to ads' cross promo.\n"
+            f"You are @tgciyim, managing channel {config['channel_link']}. You strictly do 'Ads to ads' cross promo.\n"
             f"An English channel owner named '{user_name}' sent: '{text}'\n"
             f"Task: Write a short, natural English reply (1-2 sentences). "
             f"Tell them to drop their channel link right now so we both post each other's ad (done for done). "
@@ -118,6 +135,15 @@ class RealGeminiAI:
         return reply
 
 gemini_ai = RealGeminiAI()
+
+# Sadece Ads to Ads ile ilgili mesajları süzer
+def is_ads_related(text: str) -> bool:
+    lower = text.lower()
+    keywords = [
+        "t.me/", "telegram.me/", "ads", "promo", "cross", "deal", "done", 
+        "go", "link", "channel", "ready", "ok", "sub", "post", "proof", "trade"
+    ]
+    return any(k in lower for k in keywords)
 
 async def inspect_and_reply(client: TelegramClient, api_key: str):
     try:
@@ -133,7 +159,13 @@ async def inspect_and_reply(client: TelegramClient, api_key: str):
             text = (msg.raw_text or "").strip()
             lower = text.lower()
             name = dialog.name or "User"
+            sender_username = getattr(dialog.entity, 'username', None) or str(dialog.id)
 
+            # SADECE ADS TO ADS İLE İLGİLİYSE CEVAP VER, GERİSİNE KARIŞMA
+            if not is_ads_related(text):
+                continue
+
+            # 1. Link attıysa -> Ratlogscloud'a at, Done ver, YENİ HEDEF OLARAK LİSTEYE EKLE
             if "t.me/" in lower or "telegram.me/" in lower:
                 fwd = await client.forward_messages(config["storage_channel"], msg)
                 chan_name = config["storage_channel"].replace("@", "").strip()
@@ -145,10 +177,14 @@ async def inspect_and_reply(client: TelegramClient, api_key: str):
                 await asyncio.sleep(0.5)
                 await client.send_message(dialog.id, f"Done {done_link}")
                 add_log(f"✅ Karşılıklı Reklam Yapıldı: {name} -> {done_link}")
+                
+                # Yeni kişiyi hedeflere kaydet
+                add_new_trader(sender_username)
                 await client.send_read_acknowledge(dialog.id)
 
-            elif len(lower) > 1:
-                add_log(f"📩 {name} yazdı: \"{text}\" -> AI inceliyor...")
+            # 2. Ads to Ads ile ilgili soru sorduysa -> AI cevaplasın
+            else:
+                add_log(f"📩 {name} yazdı (Ads ile ilgili): \"{text}\"")
                 ai_answer = await gemini_ai.reply_to_english_user(text, name, api_key)
                 await msg.reply(ai_answer)
                 add_log(f"🤖 [AI İNGİLİZCE YANIT] {name}: \"{ai_answer}\"")
@@ -203,16 +239,64 @@ async def send_step(data: dict):
         if client.is_connected():
             await client.disconnect()
 
+# --- SEN SİTEDE OLMASAN DA ÇALIŞTIRAN CRON ADRESİ ---
+@app.get("/api/cron-run")
+async def cron_run():
+    session_str = ""
+    if os.path.exists("/tmp/active_session.txt"):
+        try:
+            with open("/tmp/active_session.txt", "r") as f:
+                session_str = f.read().strip()
+        except:
+            pass
+
+    if not session_str:
+        return {"status": "no_session", "detail": "Panelden en az 1 kez giriş yapılmış olmalı."}
+
+    idx = 0
+    if os.path.exists(CRON_INDEX_FILE):
+        try:
+            with open(CRON_INDEX_FILE, "r") as f:
+                idx = int(f.read().strip())
+        except:
+            idx = 0
+
+    res = await send_step({"session_string": session_str, "gemini_key": config["gemini_api_key"], "index": idx})
+    next_idx = res.get("next_index", idx + 1)
+    
+    try:
+        with open(CRON_INDEX_FILE, "w") as f:
+            f.write(str(next_idx))
+    except:
+        pass
+
+    return {"status": "cron_executed", "result": res}
+
+# --- GİRİŞ & LOG YOLLARI ---
 @app.post("/auth/send-code")
 async def send_code(data: dict):
     phone = data.get("phone", "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Telefon numarası girin!")
+
     client = TelegramClient(StringSession(), API_ID, API_HASH)
     await client.connect()
     try:
         res = await client.send_code_request(phone)
         temp_session = client.session.save()
+        auth_data = {
+            "phone": phone,
+            "phone_code_hash": res.phone_code_hash,
+            "temp_session": temp_session
+        }
+        try:
+            with open(AUTH_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(auth_data, f)
+        except:
+            pass
+
         add_log(f"📩 Giriş kodu istendi: {phone}")
-        return {"status": "ok", "phone": phone, "phone_code_hash": res.phone_code_hash, "temp_session": temp_session}
+        return {"status": "ok", **auth_data}
     except Exception as e:
         add_log(f"❌ Kod hatası: {e}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -227,6 +311,20 @@ async def verify_code(data: dict):
     phone_code_hash = data.get("phone_code_hash", "").strip()
     temp_session = data.get("temp_session", "").strip()
 
+    if not phone_code_hash or not temp_session:
+        if os.path.exists(AUTH_CACHE_FILE):
+            try:
+                with open(AUTH_CACHE_FILE, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                    phone = phone or cached.get("phone", "")
+                    phone_code_hash = phone_code_hash or cached.get("phone_code_hash", "")
+                    temp_session = temp_session or cached.get("temp_session", "")
+            except:
+                pass
+
+    if not phone_code_hash or not temp_session:
+        raise HTTPException(status_code=400, detail="Doğrulama anahtarı bulunamadı! 'Kod Gönder'e tekrar basın.")
+
     client = TelegramClient(StringSession(temp_session), API_ID, API_HASH)
     await client.connect()
     try:
@@ -238,6 +336,12 @@ async def verify_code(data: dict):
             await client.sign_in(password=password)
 
         token = client.session.save()
+        try:
+            with open("/tmp/active_session.txt", "w") as f:
+                f.write(token)
+        except:
+            pass
+
         add_log("🎉 GİRİŞ BAŞARILI! Oturum kaydedildi.")
         return {"status": "ok", "session_string": token}
     except Exception as e:
@@ -261,7 +365,7 @@ async def update(data: dict):
         config["promo_message"] = data.get("link").strip()
     return {"status": "ok"}
 
-# ÇÖKME İHTİMALİNİ BİTİREN GÖMÜLÜ ARAYÜZ
+# --- HTML SAYFASI ---
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -301,16 +405,16 @@ HTML_PAGE = """<!DOCTYPE html>
         <header>
             <div>
                 <h1>🤖 Real AI Ads Autopilot</h1>
-                <p style="font-size: 11px; color: #94a3b8;">Gemini Destekli İngilizce İkna & Hata Komutanı</p>
+                <p style="font-size: 11px; color: #94a3b8;">erzincan.online | Yalnızca Ads to Ads & Otomatik Hedef Ekleme</p>
             </div>
             <div style="display: flex; gap: 6px;">
-                <span class="badge badge-ai">🤖 AI Hazır</span>
+                <span class="badge badge-ai">🤖 AI Aktif</span>
                 <span id="authBadge" class="badge badge-inactive">Giriş Yok</span>
             </div>
         </header>
 
         <div class="card" id="loginCard">
-            <h3 style="font-size: 13px; color: #f59e0b; margin-bottom: 4px;">🔑 Telegram Girişi (Kalıcı)</h3>
+            <h3 style="font-size: 13px; color: #f59e0b; margin-bottom: 4px;">🔑 Telegram Girişi</h3>
             <div id="stepPhone" class="input-group">
                 <input type="text" id="phoneInput" value="+905315151419">
                 <button class="btn btn-blue" onclick="sendCode()">Kod Gönder</button>
@@ -326,7 +430,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
         <div class="grid">
             <div class="card">
-                <div class="stat-label">Hedefler</div>
+                <div class="stat-label">Aktif Hedefler</div>
                 <div class="stat-value" id="targetCount">...</div>
             </div>
             <div class="card ai-card">
@@ -344,7 +448,7 @@ HTML_PAGE = """<!DOCTYPE html>
         </div>
 
         <div class="card">
-            <div class="stat-label">Google Gemini API Key (Gerçek AI Kararları ve İngilizce Sohbet):</div>
+            <div class="stat-label">Google Gemini API Key:</div>
             <div class="input-group">
                 <input type="password" id="geminiInput" placeholder="AIzaSy...">
                 <button class="btn btn-blue" onclick="saveGeminiKey()">Kaydet</button>
@@ -358,7 +462,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
         <div class="card">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span class="stat-label">Canlı Terminal & Gerçek AI Müdahale Logları</span>
+                <span class="stat-label">Canlı Terminal Logları</span>
                 <span style="font-size: 11px; color: #64748b;">(2 sn)</span>
             </div>
             <div id="log-box"></div>
@@ -408,7 +512,7 @@ HTML_PAGE = """<!DOCTYPE html>
             });
             const data = await res.json();
             if (res.ok) {
-                sessionStorage.setItem('authTemp', JSON.stringify(data));
+                localStorage.setItem('authTemp', JSON.stringify(data));
                 alert("Kod Telegram uygulamana gönderildi!");
                 document.getElementById('stepCode').style.display = 'block';
             } else {
@@ -419,15 +523,15 @@ HTML_PAGE = """<!DOCTYPE html>
         async function verifyCode() {
             const code = document.getElementById('codeInput').value.trim();
             const password = document.getElementById('passInput').value.trim();
-            const temp = JSON.parse(sessionStorage.getItem('authTemp') || '{}');
+            const temp = JSON.parse(localStorage.getItem('authTemp') || '{}');
 
             const res = await fetch('/auth/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phone: temp.phone,
-                    phone_code_hash: temp.phone_code_hash,
-                    temp_session: temp.temp_session,
+                    phone: temp.phone || '',
+                    phone_code_hash: temp.phone_code_hash || '',
+                    temp_session: temp.temp_session || '',
                     code: code,
                     password: password
                 })
@@ -436,6 +540,7 @@ HTML_PAGE = """<!DOCTYPE html>
             const data = await res.json();
             if (res.ok && data.session_string) {
                 localStorage.setItem('tg_session_string', data.session_string);
+                localStorage.removeItem('authTemp');
                 alert("Giriş başarılı! Oturum kaydedildi.");
                 checkAuthUI();
             } else {
@@ -554,7 +659,7 @@ HTML_PAGE = """<!DOCTYPE html>
                     let color = "#a5f3fc";
                     if (l.includes("[AI MÜDAHALE]") || l.includes("⚠️")) color = "#f472b6";
                     if (l.includes("[AI İNGİLİZCE YANIT]")) color = "#c084fc";
-                    if (l.includes("✅")) color = "#4ade80";
+                    if (l.includes("✅") || l.includes("[YENİ HEDEF EKLENDİ]")) color = "#4ade80";
                     return `<div class="log-entry" style="color: ${color};">${l}</div>`;
                 }).join('');
                 logBox.scrollTop = logBox.scrollHeight;
@@ -580,7 +685,7 @@ HTML_PAGE = """<!DOCTYPE html>
 """
 
 @app.get("/")
-async def index():
+def index():
     return HTMLResponse(HTML_PAGE)
 
 if __name__ == "__main__":
